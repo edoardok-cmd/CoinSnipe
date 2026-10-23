@@ -6,7 +6,7 @@ import { Faq } from '../components/marketing/Faq';
 import { Finale } from '../components/marketing/Finale';
 import { Footer } from '../components/marketing/Footer';
 import { Hero } from '../components/marketing/Hero';
-import { SPY_LINE, activeIndex } from '../components/marketing/Nav';
+import { activeIndex, spyLine } from '../components/marketing/Nav';
 import { Nav } from '../components/marketing/Nav';
 import { Pillars } from '../components/marketing/Pillars';
 import { Pricing } from '../components/marketing/Pricing';
@@ -114,11 +114,18 @@ describe('marketing primitives', () => {
 
 describe('scroll logic', () => {
   it('activeIndex: last section whose top passed the line, -1 above the first', () => {
-    expect(activeIndex([900, 1800, 2700, 3600])).toBe(-1);
-    expect(activeIndex([SPY_LINE, 1800, 2700, 3600])).toBe(0);
-    expect(activeIndex([-1200, 40, 2700, 3600])).toBe(1);
-    expect(activeIndex([-3000, -2000, -900, 100])).toBe(3);
-    expect(activeIndex([-3000, null, 90, 400])).toBe(2);
+    const line = spyLine(900);
+    expect(activeIndex([900, 1800, 2700, 3600], line)).toBe(-1);
+    expect(activeIndex([line, 1800, 2700, 3600], line)).toBe(0);
+    expect(activeIndex([-1200, 40, 2700, 3600], line)).toBe(1);
+    expect(activeIndex([-3000, -2000, -900, 100], line)).toBe(3);
+    expect(activeIndex([-3000, null, 90, 500], line)).toBe(2);
+  });
+
+  it('spy line sits mid-viewport so a centred story step highlights its own link', () => {
+    // Portfolio step centred in a 900px viewport: its top is about 260px down the screen.
+    expect(activeIndex([-2400, -900, 260, 1500], spyLine(900))).toBe(2);
+    expect(spyLine(900)).toBeGreaterThan(260);
   });
 
   it('activeStep: swaps when the previous text leaves the reading zone', () => {

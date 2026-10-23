@@ -152,7 +152,7 @@ function FeatureSlider() {
 
 export function SignalFlow() {
   return (
-    <section className="block feat-sec" aria-labelledby="flow-title">
+    <section className="sec feat-sec" aria-labelledby="flow-title">
       <div className="wrap">
         <div className="head">
           <h2 id="flow-title">

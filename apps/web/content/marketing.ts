@@ -504,13 +504,6 @@ export const SAMPLE_COINS: SampleCoinRow[] = [
   },
 ];
 
-/** Temperature-bar fill for each momentum word. SAMPLE illustration values. */
-export const SAMPLE_MOMENTUM_GAUGE: Record<Momentum, number> = {
-  'Heating up': 78,
-  Steady: 50,
-  'Cooling down': 24,
-};
-
 export type SampleNicheRow = {
   rank: number;
   name: string;

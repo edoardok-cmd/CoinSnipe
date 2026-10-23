@@ -4,7 +4,7 @@ import { PlusIcon } from './ui';
 /** Native <details>: keyboard and screen-reader support without client JavaScript. */
 export function Faq() {
   return (
-    <section className="block" id={faq.id} aria-labelledby="faq-title">
+    <section className="sec" id={faq.id} aria-labelledby="faq-title">
       <div className="wrap">
         <div className="head">
           <h2 id="faq-title">
