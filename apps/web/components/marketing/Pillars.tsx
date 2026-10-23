@@ -3,7 +3,7 @@ import { pillars } from '../../content/marketing';
 
 export function Pillars() {
   return (
-    <section className="block" id="how" aria-labelledby="how-title">
+    <section className="sec" id="how" aria-labelledby="how-title">
       <div className="wrap">
         <div className="head">
           <h2 id="how-title">

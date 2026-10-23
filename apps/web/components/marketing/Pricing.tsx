@@ -4,7 +4,7 @@ import { CheckIcon } from './ui';
 export function Pricing() {
   const { free, pro } = pricing;
   return (
-    <section className="block" id={pricing.id} aria-labelledby="pricing-title">
+    <section className="sec" id={pricing.id} aria-labelledby="pricing-title">
       <div className="wrap">
         <div className="head">
           <h2 id="pricing-title">

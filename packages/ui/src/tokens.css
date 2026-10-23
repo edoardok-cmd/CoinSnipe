@@ -771,7 +771,7 @@ html {
 .cs .sig.cooled {
   color: rgba(255, 255, 255, 0.62);
 }
-.cs .sig.fixed {
+.cs .sig.sig-wide {
   width: 124px;
   justify-content: flex-start;
 }
@@ -801,8 +801,9 @@ html {
   text-overflow: ellipsis;
 }
 .cs .why-col {
-  font-size: 14px;
-  color: var(--cs-muted);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cs-mint);
 }
 .cs .spark path {
   vector-effect: non-scaling-stroke;
@@ -900,6 +901,9 @@ html {
   .cs .lrow .only-m .gauge {
     display: none;
   }
+  .cs .lrow .only-m .sig-wide {
+    width: auto;
+  }
   .cs .lrow > .mcol,
   .cs .mcol {
     display: flex;
@@ -948,6 +952,18 @@ html {
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
+.cs .alert.a1 {
+  right: -4%;
+  top: 70%;
+}
+.cs .alert.a2 {
+  left: -6%;
+  top: 80%;
+}
+.cs .alert.a3 {
+  left: -4%;
+  top: 2%;
+}
 .cs .a-hot {
   background: rgba(40, 20, 14, 0.85);
   border: 1px solid rgba(255, 138, 91, 0.45);
@@ -990,8 +1006,23 @@ html {
 }
 @media (max-width: 900px) {
   .cs .radarbox {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     padding: 24px 18px;
+  }
+  .cs .radar {
+    width: min(380px, 100%);
+  }
+  .cs .alert.a1 {
+    right: 0;
+    top: 66%;
+  }
+  .cs .alert.a2 {
+    left: 0;
+    top: 80%;
+  }
+  .cs .alert.a3 {
+    left: 0;
+    top: 2%;
   }
   .cs .alert {
     font-size: 12px;
@@ -999,7 +1030,7 @@ html {
 }
 
 /* ------------------------------------------------------------------ section scaffolding */
-.cs section.block {
+.cs section.sec {
   position: relative;
   padding: clamp(80px, 11vw, 140px) 0 0;
 }

@@ -5,7 +5,6 @@ import type { KeyboardEvent } from 'react';
 import {
   SAMPLE_COINS,
   SAMPLE_GEMS,
-  SAMPLE_MOMENTUM_GAUGE,
   SAMPLE_NICHES,
   coinTabs,
   signalConfig,
@@ -41,24 +40,10 @@ function Star({ label, name }: { label: string; name: string }) {
   );
 }
 
+/** Niche momentum: a plain text pill, as on the canvas (no gauge). */
 function MomentumPill({ value }: { value: Momentum }) {
-  const temperature =
-    value === 'Heating up' ? 'Heated' : value === 'Cooling down' ? 'Cooled off' : 'Balanced';
-  return (
-    <span
-      className={`sig fixed ${temperature === 'Heated' ? 'heated' : temperature === 'Cooled off' ? 'cooled' : ''}`}
-    >
-      <span
-        className="gauge"
-        role="img"
-        aria-label={`Momentum level ${SAMPLE_MOMENTUM_GAUGE[value]} out of 100`}
-        style={{ ['--fill' as string]: SAMPLE_MOMENTUM_GAUGE[value] }}
-      >
-        <i />
-      </span>
-      {value}
-    </span>
-  );
+  const tone = value === 'Heating up' ? 'heated' : value === 'Cooling down' ? 'cooled' : '';
+  return <span className={`sig sig-wide ${tone}`}>{value}</span>;
 }
 
 function CoinsTable() {
@@ -109,7 +94,7 @@ function CoinsTable() {
             <Change value={c.change} />
           </span>
           <span role="cell" className="h-m">
-            <TemperaturePill value={c.temperature} fill={c.gauge} fixed />
+            <TemperaturePill value={c.temperature} fill={c.gauge} wide />
           </span>
           {v03 ? (
             <span role="cell" className="h-m quad">
@@ -296,13 +281,8 @@ function Radar() {
           <rect x="88" y="70" width="12" height="12" rx="3" fill="#E7C35A" />
         </svg>
         {r.alerts.map((a, i) => {
-          const pos = [
-            { right: '-4%', top: '70%' },
-            { left: '-6%', top: '80%' },
-            { left: '-4%', top: '2%' },
-          ][i];
           return (
-            <span className={`alert a-${a.kind}`} style={pos} key={a.kind}>
+            <span className={`alert a${i + 1} a-${a.kind}`} key={a.kind}>
               <BellIcon />
               {'leadFirst' in a ? (
                 <>

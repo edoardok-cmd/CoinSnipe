@@ -238,7 +238,7 @@ function PortfolioCard() {
               {h.value}
             </span>
             <span className="r">
-              <TemperaturePill value={h.temperature} fill={h.gauge} fixed />
+              <TemperaturePill value={h.temperature} fill={h.gauge} wide />
             </span>
           </div>
         ))}

@@ -116,4 +116,93 @@ test.describe('marketing page', () => {
     await page.goto('/');
     await expect(page.getByText('Sample data', { exact: true })).toBeVisible();
   });
+
+  test('temperature pills stay in their rows, also with reduced motion', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/', { waitUntil: 'networkidle' });
+    const check = async (rowSelector: string, expected: number) => {
+      const result = await page.evaluate((sel) => {
+        const rows = Array.from(document.querySelectorAll<HTMLElement>(sel));
+        return rows
+          .filter((r) => r.offsetParent !== null)
+          .map((r) => {
+            const pill = r.querySelector<HTMLElement>('.sig:not(.only-m .sig)');
+            if (!pill) return { ok: false, why: 'no pill' };
+            const rb = r.getBoundingClientRect();
+            const pb = pill.getBoundingClientRect();
+            return {
+              ok:
+                getComputedStyle(pill).position !== 'fixed' &&
+                pb.top >= rb.top - 1 &&
+                pb.bottom <= rb.bottom + 1 &&
+                pb.right <= rb.right + 1,
+              why: `${getComputedStyle(pill).position} ${Math.round(pb.top - rb.top)}`,
+            };
+          });
+      }, rowSelector);
+      expect(result.length).toBe(expected);
+      expect(result.filter((r) => !r.ok)).toEqual([]);
+    };
+    await page.locator('#signals').scrollIntoViewIfNeeded();
+    await check('#signals .lrow', 6);
+    await page.getByRole('tab', { name: /Top niches/ }).click();
+    await check('#signals .lrow', 6);
+    // niche momentum words fit inside their pill
+    const overflow = await page.evaluate(
+      () =>
+        Array.from(document.querySelectorAll<HTMLElement>('.sig-wide')).filter(
+          (e) => e.offsetParent !== null && e.scrollWidth > e.clientWidth,
+        ).length,
+    );
+    expect(overflow).toBe(0);
+    await page.locator('.story').scrollIntoViewIfNeeded();
+    await page.evaluate(() => document.getElementById('portfolio')!.scrollIntoView());
+    await page.waitForTimeout(800);
+    await check('.sv[data-on="true"] .hold', 4);
+  });
+
+  test('radar panel fits at 390 and the niche pills do not collide', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/', { waitUntil: 'networkidle' });
+    await page.getByRole('tab', { name: /Portfolio/ }).click();
+    const clipped = await page.evaluate(() => {
+      const panel = document.querySelector<HTMLElement>('.listpanel')!;
+      const pb = panel.getBoundingClientRect();
+      return Array.from(panel.querySelectorAll<HTMLElement>('.radarbox *'))
+        .filter((e) => e.getBoundingClientRect().width > 0)
+        .filter(
+          (e) =>
+            e.getBoundingClientRect().right > pb.right + 1 ||
+            e.getBoundingClientRect().left < pb.left - 1,
+        )
+        .map((e) => e.className || e.tagName);
+    });
+    expect(clipped).toEqual([]);
+    await page.getByRole('tab', { name: /Top niches/ }).click();
+    const collisions = await page.evaluate(
+      () =>
+        Array.from(document.querySelectorAll<HTMLElement>('#signals .lrow')).filter((row) => {
+          const pill = row.querySelector<HTMLElement>('.mcol .sig');
+          const spark = row.querySelector<HTMLElement>('.rr');
+          if (!pill || !spark) return true;
+          return pill.getBoundingClientRect().left < spark.getBoundingClientRect().right;
+        }).length,
+    );
+    expect(collisions).toBe(0);
+  });
+
+  test('nav highlights Portfolio while the portfolio step is centred', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/', { waitUntil: 'networkidle' });
+    await page.evaluate(() => {
+      document.documentElement.style.scrollBehavior = 'auto';
+      const el = document.getElementById('portfolio')!;
+      const r = el.getBoundingClientRect();
+      window.scrollTo(0, r.top + window.scrollY - (window.innerHeight - r.height) / 2);
+    });
+    await expect(
+      page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Portfolio' }),
+    ).toHaveAttribute('aria-current', 'true');
+  });
 });

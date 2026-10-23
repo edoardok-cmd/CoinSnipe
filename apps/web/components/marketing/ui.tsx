@@ -189,15 +189,15 @@ export function CoinLogo({
 export function TemperaturePill({
   value,
   fill,
-  fixed = false,
+  wide = false,
 }: {
   value: Temperature;
   fill: number;
-  fixed?: boolean;
+  wide?: boolean;
 }) {
   const cls = value === 'Heated' ? 'heated' : value === 'Cooled off' ? 'cooled' : '';
   return (
-    <span className={`sig ${cls}${fixed ? ' fixed' : ''}`}>
+    <span className={`sig ${cls}${wide ? ' sig-wide' : ''}`}>
       <span
         className="gauge"
         role="img"
@@ -290,7 +290,7 @@ export function Sparkline({
 export function Section({
   id,
   children,
-  className = 'block',
+  className = 'sec',
   labelledBy,
 }: {
   id?: string;

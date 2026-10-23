@@ -6,13 +6,16 @@ import { nav } from '../../content/marketing';
 import { CloseIcon, Logogram, MenuIcon } from './ui';
 
 /** Distance from the top of the viewport at which a section counts as "reached". */
-export const SPY_LINE = 140;
+/** A section counts as reached once its top passes this share of the viewport height. */
+export const SPY_SHARE = 0.45;
+/** Same line in px for a viewport height. */
+export const spyLine = (viewportHeight: number): number => viewportHeight * SPY_SHARE;
 
 /**
- * Which link is active: the last link whose section top has passed SPY_LINE.
+ * Which link is active: the last link whose section top is above the line (see spyLine).
  * Pure so the unit test can pin it. Returns -1 above the first section.
  */
-export function activeIndex(tops: (number | null)[], line: number = SPY_LINE): number {
+export function activeIndex(tops: (number | null)[], line: number): number {
   let active = -1;
   tops.forEach((top, i) => {
     if (top !== null && top <= line) active = i;
@@ -28,7 +31,7 @@ export function Nav() {
   const progressRef = useRef<HTMLSpanElement>(null);
 
   /* Section dots: one 1px sentinel per section, watched by an IntersectionObserver whose root is
-     shifted down by SPY_LINE. A sentinel changes state exactly when its section crosses the line. */
+     shifted down by SPY_SHARE of the viewport. A sentinel changes state exactly when its section crosses the line. */
   useEffect(() => {
     const sentinels: (HTMLElement | null)[] = nav.links.map((link) => {
       const target = document.getElementById(link.href.slice(1));
@@ -41,9 +44,14 @@ export function Nav() {
       return s;
     });
     const evaluate = () =>
-      setActive(activeIndex(sentinels.map((s) => (s ? s.getBoundingClientRect().top : null))));
+      setActive(
+        activeIndex(
+          sentinels.map((s) => (s ? s.getBoundingClientRect().top : null)),
+          spyLine(window.innerHeight),
+        ),
+      );
     const io = new IntersectionObserver(evaluate, {
-      rootMargin: `-${SPY_LINE}px 0px 0px 0px`,
+      rootMargin: `-${SPY_SHARE * 100}% 0px 0px 0px`,
       threshold: [0, 1],
     });
     sentinels.forEach((s) => s && io.observe(s));
