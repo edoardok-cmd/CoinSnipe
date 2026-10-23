@@ -1,0 +1,9 @@
+{
+  "entries": [],
+  "patterns": [
+    {
+      "pattern": "top 3 are \\d+\\s*(x|×) bigger",
+      "reason": "Sector fact, not a forecast. Allowed by the master plan 7.5 copy rule."
+    }
+  ]
+}
