@@ -27,3 +27,7 @@ task-folders/
 # OS / editor
 .DS_Store
 *.log
+
+# internal cost / vendor-price docs live in the private Agent X workspace, never in this public repo
+docs/decisions.md
+docs/data-licensing.md
