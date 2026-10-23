@@ -1,0 +1,44 @@
+{
+  "url": "http://127.0.0.1:3555/ (next start, production build, NEXT_PUBLIC_APP_ENV unset)",
+  "lighthouse": "12.8.2",
+  "form_factor": "mobile",
+  "thresholds": {
+    "performance": 85,
+    "accessibility": 95
+  },
+  "runs": [
+    {
+      "scores": {
+        "performance": 96,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100
+      },
+      "LCP": "2.7\u00a0s",
+      "TBT": "10\u00a0ms",
+      "CLS": "0"
+    },
+    {
+      "scores": {
+        "performance": 96,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100
+      },
+      "LCP": "2.7\u00a0s",
+      "TBT": "10\u00a0ms",
+      "CLS": "0"
+    },
+    {
+      "scores": {
+        "performance": 96,
+        "accessibility": 100,
+        "best-practices": 100,
+        "seo": 100
+      },
+      "LCP": "2.7\u00a0s",
+      "TBT": "10\u00a0ms",
+      "CLS": "0"
+    }
+  ]
+}
