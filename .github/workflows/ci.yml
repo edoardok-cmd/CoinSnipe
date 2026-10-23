@@ -46,6 +46,9 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Copy compliance lint
+        run: node tools/copy-lint/index.ts
+
       - name: Type-check
         run: pnpm typecheck
 

@@ -1,0 +1,104 @@
+[
+  {
+    "id": "buy-directive",
+    "severity": "error",
+    "pattern": "\\b(buy|buying)\\s+(now|at)\\b|\\bshould\\s+buy\\b|\\bworth\\s+buying\\b",
+    "reason": "Tells the user to buy. CoinSnipe describes data and history, never advice (MiCA)."
+  },
+  {
+    "id": "sell-directive",
+    "severity": "error",
+    "pattern": "\\b(sell|selling)\\s+(now|at)\\b|\\bshould\\s+sell\\b|\\bworth\\s+selling\\b",
+    "reason": "Tells the user to sell. CoinSnipe describes data and history, never advice (MiCA)."
+  },
+  {
+    "id": "hold-directive",
+    "severity": "error",
+    "pattern": "\\bhold\\s+(it|them)\\b|\\bshould\\s+hold\\b",
+    "reason": "Tells the user to hold. Describe the data and its history instead."
+  },
+  {
+    "id": "price-target",
+    "severity": "error",
+    "pattern": "\\bprice\\s+targets?\\b",
+    "reason": "Implies a predicted price. Describe ranges and history instead."
+  },
+  {
+    "id": "target",
+    "severity": "error",
+    "pattern": "\\btargets?\\b",
+    "reason": "Reads as a predicted outcome. Describe ranges and history instead."
+  },
+  {
+    "id": "will-reach",
+    "severity": "error",
+    "pattern": "\\bwill\\s+(reach|hit)\\b",
+    "reason": "States a forecast as fact. Describe probabilities and history instead."
+  },
+  {
+    "id": "could-10x",
+    "severity": "error",
+    "pattern": "\\b10\\s*(x|×)(?![a-z])|\\b100\\s*(x|×)(?![a-z])",
+    "reason": "Promises a multiple. Never write 10x or 100x."
+  },
+  {
+    "id": "multiple-forecast",
+    "severity": "error",
+    "pattern": "\\b\\d+(\\.\\d+)?\\s*(x|×|times)(?![a-z])(?=[^.\\n]{0,40}\\b(potential|upside|gains?)\\b)|\\b(potential|upside|gains?)\\b[^.\\n]{0,40}\\b\\d+(\\.\\d+)?\\s*(x|×|times)(?![a-z])",
+    "reason": "Predicts a multiple near potential, upside or gains. Facts such as 'top 3 are 12× bigger' are allowed through the allowlist."
+  },
+  {
+    "id": "moon",
+    "severity": "error",
+    "pattern": "\\bmoon\\b",
+    "reason": "Hype language. Describe the data instead."
+  },
+  {
+    "id": "pump",
+    "severity": "error",
+    "pattern": "\\bpump(s|ed|ing)?\\b",
+    "reason": "Hype language. Describe the data instead."
+  },
+  {
+    "id": "guaranteed",
+    "severity": "error",
+    "pattern": "\\bguaranteed\\b",
+    "reason": "No outcome is guaranteed. Describe probabilities and history instead."
+  },
+  {
+    "id": "risk-free",
+    "severity": "error",
+    "pattern": "\\brisk[\\s-]?free\\b",
+    "reason": "No crypto position is risk-free."
+  },
+  {
+    "id": "get-rich",
+    "severity": "error",
+    "pattern": "\\bget\\s+rich\\b",
+    "reason": "Sells getting rich. Not allowed for trust or EU marketing rules."
+  },
+  {
+    "id": "recommended-for-you",
+    "severity": "error",
+    "pattern": "\\brecommended\\s+for\\s+you\\b",
+    "reason": "Personalised advice. Profiles are filters the user chooses."
+  },
+  {
+    "id": "we-recommend",
+    "severity": "error",
+    "pattern": "\\bwe\\s+recommend\\b",
+    "reason": "Personalised advice. CoinSnipe describes data, it does not recommend assets."
+  },
+  {
+    "id": "you-should",
+    "severity": "error",
+    "pattern": "\\byou\\s+should\\b",
+    "reason": "Reads as advice. Rephrase as a description of the data. Add a precise allowlist entry if the sentence is an explanatory negative."
+  },
+  {
+    "id": "returns-hint",
+    "severity": "warning",
+    "pattern": "\\b(find|catch|spot)\\s+(the\\s+)?winners?\\b|\\bwinners?\\s+early\\b|\\bgems?\\b",
+    "reason": "Hints at returns. Printed for review, does not fail CI."
+  }
+]
