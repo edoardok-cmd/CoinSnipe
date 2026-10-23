@@ -1,0 +1,1014 @@
+// CoinSnipe database schema v1 (CSN-003). Postgres 16 locally, Neon in production.
+//
+// Conventions
+// - DB names are snake_case (@map / @@map); Prisma fields are camelCase.
+// - Every timestamp is timestamptz(3). Calendar days are `date`.
+// - Raw-fact tables carry provenance: `as_of` (date the value was known, used for
+//   point-in-time reads: the backtest only reads rows with as_of <= rebuild date),
+//   `fetched_at` (when the worker stored it) and `source`.
+// - Money and market values are Decimal. Scores, ratios and heat are double precision.
+// - Model outputs written by packages/scoring (quadrant, archetype, bands, phase, regime,
+//   fuel, fragility, labels) are text holding stable lowercase codes, not enums, so a
+//   new model version can add a state without a schema migration. Display labels live
+//   in the app. Closed sets that the product spec fixes are enums.
+// - Dates are never defaulted from the clock: jobs pass the run date explicitly.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums (closed sets from the spec)
+// ---------------------------------------------------------------------------
+
+enum Horizon {
+  short
+  medium
+  long
+
+  @@map("horizon")
+}
+
+enum Goal {
+  understand
+  track
+  trends
+
+  @@map("goal")
+}
+
+enum RiskProfile {
+  safe
+  moderate
+  risky
+
+  @@map("risk_profile")
+}
+
+enum AlertChannel {
+  push
+  email
+
+  @@map("alert_channel")
+}
+
+enum LevelKind {
+  support
+  resistance
+
+  @@map("level_kind")
+}
+
+enum SecurityEventKind {
+  hack
+  exploit
+  audit
+
+  @@map("security_event_kind")
+}
+
+enum CalendarEventKind {
+  fomc
+  cpi
+  payrolls
+  pce
+  etf
+  unlock
+
+  @@map("calendar_event_kind")
+}
+
+enum ScenarioKind {
+  base
+  upside
+  downside
+
+  @@map("scenario_kind")
+}
+
+// ---------------------------------------------------------------------------
+// Reference data
+// ---------------------------------------------------------------------------
+
+model Sector {
+  id          String   @id
+  name        String
+  description String
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  assets      Asset[]
+  heatHistory SectorHeatDaily[]
+
+  @@map("sectors")
+}
+
+model Narrative {
+  id          String   @id
+  name        String
+  description String
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  heatHistory NarrativeHeatDaily[]
+
+  @@map("narratives")
+}
+
+// narrative_ids is a text[] of narratives.id values (no FK: Postgres cannot FK an array).
+model Asset {
+  id             String    @id // internal slug
+  symbol         String
+  name           String
+  coingeckoId    String    @unique @map("coingecko_id")
+  defillamaSlug  String?   @map("defillama_slug")
+  defillamaChain String?   @map("defillama_chain")
+  githubRepos    String[]  @default([]) @map("github_repos")
+  sectorId       String    @map("sector_id")
+  narrativeIds   String[]  @default([]) @map("narrative_ids")
+  chain          String?
+  genesisDate    DateTime? @map("genesis_date") @db.Date
+  isMeme         Boolean   @default(false) @map("is_meme")
+  isGoldToken    Boolean   @default(false) @map("is_gold_token")
+  logoUrl        String?   @map("logo_url")
+  active         Boolean   @default(true)
+  delistedAt     DateTime? @map("delisted_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  sector Sector @relation(fields: [sectorId], references: [id])
+
+  priceDaily          PriceDaily[]
+  priceHourly         PriceHourly[]
+  protocolMetrics     ProtocolMetricsDaily[]
+  derivatives         DerivativesDaily[]
+  devActivity         DevActivityWeekly[]
+  exchangeListings    ExchangeListing[]
+  unlockEvents        UnlockEvent[]
+  securityEvents      SecurityEvent[]
+  etfFlows            EtfFlowsDaily[]
+  liquidationClusters LiquidationCluster[]
+  scores              ScoreDaily[]
+  keyLevels           KeyLevel[]
+  scenarios           Scenario[]
+  calendarEntries     EventCalendarEntry[]
+  signals             Signal[]
+  holdings            Holding[]
+  watchlistItems      WatchlistItem[]
+  alerts              Alert[]
+  explainer           AssetExplainer?
+
+  @@index([sectorId])
+  @@index([symbol])
+  @@index([active])
+  @@map("assets")
+}
+
+// ---------------------------------------------------------------------------
+// Raw facts (provenance on every row: as_of, fetched_at, source)
+// ---------------------------------------------------------------------------
+
+model PriceDaily {
+  assetId      String   @map("asset_id")
+  date         DateTime @db.Date
+  open         Decimal? @db.Decimal(38, 18)
+  high         Decimal? @db.Decimal(38, 18)
+  low          Decimal? @db.Decimal(38, 18)
+  close        Decimal  @db.Decimal(38, 18)
+  volumeUsd    Decimal? @map("volume_usd") @db.Decimal(38, 2)
+  marketCapUsd Decimal? @map("market_cap_usd") @db.Decimal(38, 2)
+  circulating  Decimal? @db.Decimal(38, 8)
+  totalSupply  Decimal? @map("total_supply") @db.Decimal(38, 8)
+  asOf         DateTime @map("as_of") @db.Date
+  fetchedAt    DateTime @default(now()) @map("fetched_at") @db.Timestamptz(3)
+  source       String
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@id([assetId, date])
+  @@index([date])
+  @@map("price_daily")
+}
+
+// Hourly candles for BTC, ETH and the top coins (volume profile K2).
+model PriceHourly {
+  assetId   String   @map("asset_id")
+  ts        DateTime @db.Timestamptz(3) // start of the hour
+  open      Decimal  @db.Decimal(38, 18)
+  high      Decimal  @db.Decimal(38, 18)
+  low       Decimal  @db.Decimal(38, 18)
+  close     Decimal  @db.Decimal(38, 18)
+  volumeUsd Decimal? @map("volume_usd") @db.Decimal(38, 2)
+  asOf      DateTime @map("as_of") @db.Date
+  fetchedAt DateTime @default(now()) @map("fetched_at") @db.Timestamptz(3)
+  source    String
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@id([assetId, ts])
+  @@index([ts])
+  @@map("price_hourly")
+}
+
+model ProtocolMetricsDaily {
+  assetId      String   @map("asset_id")
+  date         DateTime @db.Date
+  tvlUsd       Decimal? @map("tvl_usd") @db.Decimal(38, 2)
+  feesUsd      Decimal? @map("fees_usd") @db.Decimal(38, 2)
+  revenueUsd   Decimal? @map("revenue_usd") @db.Decimal(38, 2)
+  dexVolumeUsd Decimal? @map("dex_volume_usd") @db.Decimal(38, 2)
+  activeUsers  BigInt?  @map("active_users")
+  asOf         DateTime @map("as_of") @db.Date
+  fetchedAt    DateTime @default(now()) @map("fetched_at") @db.Timestamptz(3)
+  source       String
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@id([assetId, date])
+  @@index([date])
+  @@map("protocol_metrics_daily")
+}
+
+// chain = 'all' for the global total, otherwise a DefiLlama chain name (assets.defillama_chain).
+model StablecoinSupplyDaily {
+  date      DateTime @db.Date
+  chain     String   @default("all")
+  supplyUsd Decimal  @map("supply_usd") @db.Decimal(38, 2)
+  asOf      DateTime @map("as_of") @db.Date
+  fetchedAt DateTime @default(now()) @map("fetched_at") @db.Timestamptz(3)
+  source    String
+
+  @@id([date, chain])
+  @@index([chain, date])
+  @@map("stablecoin_supply_daily")
+}
+
+model DerivativesDaily {
+  assetId         String   @map("asset_id")
+  date            DateTime @db.Date
+  exchange        String
+  fundingRate8h   Decimal? @map("funding_rate_8h") @db.Decimal(18, 10)
+  openInterestUsd Decimal? @map("open_interest_usd") @db.Decimal(38, 2)
+  asOf            DateTime @map("as_of") @db.Date
+  fetchedAt       DateTime @default(now()) @map("fetched_at") @db.Timestamptz(3)
+  source          String
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@id([assetId, date, exchange])
+  @@index([date])
+  @@map("derivatives_daily")
+}
+
+// Daily snapshot of Deribit open interest per expiry and strike (call + put summed). K5.
+model OptionsOi {
+  date      DateTime @db.Date // snapshot day
+  currency  String
+  expiry    DateTime @db.Date
+  strike    Decimal  @db.Decimal(20, 2)
+  oi        Decimal  @db.Decimal(38, 8)
+  asOf      DateTime @map("as_of") @db.Date
+  fetchedAt DateTime @default(now()) @map("fetched_at") @db.Timestamptz(3)
+  source    String
+
+  @@id([date, currency, expiry, strike])
+  @@index([currency, date])
+  @@map("options_oi")
+}
+
+model DvolDaily {
+  currency  String
+  date      DateTime @db.Date
+  dvol      Float
+  asOf      DateTime @map("as_of") @db.Date
+  fetchedAt DateTime @default(now()) @map("fetched_at") @db.Timestamptz(3)
+  source    String
+
+  @@id([currency, date])
+  @@index([date])
+  @@map("dvol_daily")
+}
+
+// series_id examples: M2SL, DTWEXBGS, DGS10, DCOILWTICO, VIXCLS, NASDAQCOM, SP500, gold.
+// Holds every published vintage of a series observation: the key includes as_of (the
+// publication date), so a revision adds a row instead of overwriting the original value and
+// a backtest reading `as_of <= rebuild date` sees what was known then. Other raw tables keep
+// the latest value only. Latest vintage: the row with the greatest as_of per (series_id, date).
+// (series_id, date) lookups use the leading columns of the primary key.
+model MacroDaily {
+  seriesId  String   @map("series_id")
+  date      DateTime @db.Date
+  value     Decimal  @db.Decimal(38, 10)
+  asOf      DateTime @map("as_of") @db.Date
+  fetchedAt DateTime @default(now()) @map("fetched_at") @db.Timestamptz(3)
+  source    String
+
+  @@id([seriesId, date, asOf])
+  @@index([date])
+  @@map("macro_daily")
+}
+
+model FearGreedDaily {
+  date           DateTime @id @db.Date
+  value          Int
+  classification String?
+  asOf           DateTime @map("as_of") @db.Date
+  fetchedAt      DateTime @default(now()) @map("fetched_at") @db.Timestamptz(3)
+  source         String
+
+  @@map("fear_greed_daily")
+}
+
+// month = first day of the month the GPR reading describes.
+model GprMonthly {
+  month     DateTime @id @db.Date
+  gpr       Float
+  asOf      DateTime @map("as_of") @db.Date
+  fetchedAt DateTime @default(now()) @map("fetched_at") @db.Timestamptz(3)
+  source    String
+
+  @@map("gpr_monthly")
+}
+
+// source = provenance (the feed the worker read); publisher = the outlet named by the feed.
+model NewsItem {
+  id          BigInt   @id @default(autoincrement())
+  urlHash     String   @unique @map("url_hash")
+  url         String
+  publishedAt DateTime @map("published_at") @db.Timestamptz(3)
+  title       String
+  publisher   String?
+  topic       String?
+  tone        Int? // -100..100, checked in SQL
+  assetIds    String[] @default([]) @map("asset_ids")
+  asOf        DateTime @map("as_of") @db.Date
+  fetchedAt   DateTime @default(now()) @map("fetched_at") @db.Timestamptz(3)
+  source      String
+
+  @@index([publishedAt])
+  @@index([assetIds], type: Gin)
+  @@map("news_items")
+}
+
+model DevActivityWeekly {
+  assetId    String   @map("asset_id")
+  weekStart  DateTime @map("week_start") @db.Date
+  commits    Int
+  activeDevs Int      @map("active_devs")
+  asOf       DateTime @map("as_of") @db.Date
+  fetchedAt  DateTime @default(now()) @map("fetched_at") @db.Timestamptz(3)
+  source     String
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@id([assetId, weekStart])
+  @@index([weekStart])
+  @@map("dev_activity_weekly")
+}
+
+model ExchangeListing {
+  id         BigInt   @id @default(autoincrement())
+  assetId    String   @map("asset_id")
+  exchange   String
+  pairQuote  String   @map("pair_quote")
+  firstSeen  DateTime @map("first_seen") @db.Date
+  lastSeen   DateTime @map("last_seen") @db.Date
+  isFiatPair Boolean  @default(false) @map("is_fiat_pair")
+  asOf       DateTime @map("as_of") @db.Date
+  fetchedAt  DateTime @default(now()) @map("fetched_at") @db.Timestamptz(3)
+  source     String
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@unique([assetId, exchange, pairQuote])
+  @@index([exchange])
+  @@index([lastSeen])
+  @@map("exchange_listings")
+}
+
+// category distinguishes allocations unlocking on the same day; 'all' when the source has none.
+model UnlockEvent {
+  id             BigInt   @id @default(autoincrement())
+  assetId        String   @map("asset_id")
+  date           DateTime @db.Date
+  category       String   @default("all")
+  amount         Decimal  @db.Decimal(38, 8)
+  pctCirculating Float?   @map("pct_circulating")
+  asOf           DateTime @map("as_of") @db.Date
+  fetchedAt      DateTime @default(now()) @map("fetched_at") @db.Timestamptz(3)
+  source         String
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@unique([assetId, date, category])
+  @@index([date])
+  @@map("unlock_events")
+}
+
+model SecurityEvent {
+  id        BigInt            @id @default(autoincrement())
+  assetId   String            @map("asset_id")
+  date      DateTime          @db.Date
+  kind      SecurityEventKind
+  usdLost   Decimal?          @map("usd_lost") @db.Decimal(38, 2)
+  title     String?
+  sourceRef String?           @map("source_ref")
+  asOf      DateTime          @map("as_of") @db.Date
+  fetchedAt DateTime          @default(now()) @map("fetched_at") @db.Timestamptz(3)
+  source    String
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@unique([source, sourceRef])
+  @@index([assetId, date])
+  @@index([date])
+  @@map("security_events")
+}
+
+// Spot-ETF flows per underlying asset (net_flow_usd positive = net inflow).
+model EtfFlowsDaily {
+  assetId           String   @map("asset_id")
+  date              DateTime @db.Date
+  netFlowUsd        Decimal  @map("net_flow_usd") @db.Decimal(38, 2)
+  totalNetAssetsUsd Decimal? @map("total_net_assets_usd") @db.Decimal(38, 2)
+  asOf              DateTime @map("as_of") @db.Date
+  fetchedAt         DateTime @default(now()) @map("fetched_at") @db.Timestamptz(3)
+  source            String
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@id([assetId, date])
+  @@index([date])
+  @@map("etf_flows_daily")
+}
+
+// side = 'long' | 'short' (which positions would be force-closed at price_level).
+model LiquidationCluster {
+  id             BigInt   @id @default(autoincrement())
+  assetId        String   @map("asset_id")
+  date           DateTime @db.Date // snapshot day
+  priceLevel     Decimal  @map("price_level") @db.Decimal(38, 18)
+  side           String
+  liquidationUsd Decimal  @map("liquidation_usd") @db.Decimal(38, 2)
+  asOf           DateTime @map("as_of") @db.Date
+  fetchedAt      DateTime @default(now()) @map("fetched_at") @db.Timestamptz(3)
+  source         String
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@unique([assetId, date, priceLevel, side])
+  @@index([date])
+  @@map("liquidation_clusters")
+}
+
+model GlobalMarketDaily {
+  date         DateTime @id @db.Date
+  btcDominance Float    @map("btc_dominance") // percent of total market cap
+  totalMcap    Decimal  @map("total_mcap") @db.Decimal(38, 2)
+  asOf         DateTime @map("as_of") @db.Date
+  fetchedAt    DateTime @default(now()) @map("fetched_at") @db.Timestamptz(3)
+  source       String
+
+  @@map("global_market_daily")
+}
+
+// Calendar entries are input data (central-bank and ETF dates, Tokenomist unlocks).
+// Dedupe: unique (asset_id, date, kind, title) for coin rows. Postgres treats NULLs as
+// distinct, so market-wide rows (asset_id null) are deduplicated by a partial unique index
+// on (date, kind, title) WHERE asset_id IS NULL, written by hand at the end of 0001_init
+// (Prisma cannot express it). Upsert coin rows through the Prisma unique key; upsert
+// market-wide rows with raw SQL `ON CONFLICT (date, kind, title) WHERE asset_id IS NULL`.
+model EventCalendarEntry {
+  id        BigInt            @id @default(autoincrement())
+  date      DateTime          @db.Date
+  kind      CalendarEventKind
+  title     String
+  assetId   String?           @map("asset_id")
+  asOf      DateTime          @map("as_of") @db.Date
+  fetchedAt DateTime          @default(now()) @map("fetched_at") @db.Timestamptz(3)
+  source    String
+
+  asset Asset? @relation(fields: [assetId], references: [id])
+
+  @@unique([assetId, date, kind, title])
+  @@index([date])
+  @@index([assetId, date])
+  @@map("events_calendar")
+}
+
+// ---------------------------------------------------------------------------
+// Computed (written by the daily scoring run; re-running a date upserts the same key)
+// ---------------------------------------------------------------------------
+
+// One row per coin, day and horizon. quality and its pillars repeat across horizons so
+// the screener reads a single row. breakdown holds every metric: value, score, weight,
+// source, keyed by master-plan ID (U1, E3, T2 ...). Pillar scores are null when a pillar
+// is not applicable (for example Earnings for meme coins, gate G5).
+model ScoreDaily {
+  assetId         String   @map("asset_id")
+  date            DateTime @db.Date
+  horizon         Horizon
+  quality         Float
+  usage           Float?
+  earnings        Float?
+  supply          Float?
+  access          Float?
+  safety          Float?
+  timing          Float
+  priceTrend      Float?   @map("price_trend")
+  season          Float?
+  temperature     Float?
+  temperatureBand String   @map("temperature_band")
+  combined        Float
+  combinedLabel   String   @map("combined_label")
+  quadrant        String
+  archetype       String
+  headroomBand    String?  @map("headroom_band")
+  obstacles       Json     @default("[]")
+  gatesFired      String[] @default([]) @map("gates_fired")
+  lowConfidence   Boolean  @default(false) @map("low_confidence")
+  coveragePct     Float    @map("coverage_pct")
+  breakdown       Json
+  modelVersion    String   @map("model_version")
+  computedAt      DateTime @default(now()) @map("computed_at") @db.Timestamptz(3)
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@id([assetId, date, horizon])
+  @@index([date])
+  @@map("scores_daily")
+}
+
+// phase is the confirmed phase; phase_pending is the candidate phase waiting out the
+// 3-day hysteresis, pending_days how many days in a row it has been seen (master plan 6).
+model SectorHeatDaily {
+  sectorId     String   @map("sector_id")
+  date         DateTime @db.Date
+  heat         Float
+  slope14d     Float?   @map("slope_14d")
+  phase        String
+  phasePending String?  @map("phase_pending")
+  pendingDays  Int      @default(0) @map("pending_days")
+  modelVersion String   @map("model_version")
+  computedAt   DateTime @default(now()) @map("computed_at") @db.Timestamptz(3)
+
+  sector Sector @relation(fields: [sectorId], references: [id])
+
+  @@id([sectorId, date])
+  @@index([date])
+  @@map("sector_heat_daily")
+}
+
+model NarrativeHeatDaily {
+  narrativeId  String   @map("narrative_id")
+  date         DateTime @db.Date
+  heat         Float
+  slope14d     Float?   @map("slope_14d")
+  phase        String
+  phasePending String?  @map("phase_pending")
+  pendingDays  Int      @default(0) @map("pending_days")
+  modelVersion String   @map("model_version")
+  computedAt   DateTime @default(now()) @map("computed_at") @db.Timestamptz(3)
+
+  narrative Narrative @relation(fields: [narrativeId], references: [id])
+
+  @@id([narrativeId, date])
+  @@index([date])
+  @@map("narrative_heat_daily")
+}
+
+// score -100..+100; inputs holds A1..A9 sub-scores and the macro scaling factor.
+model MarketWeatherDaily {
+  date         DateTime @id @db.Date
+  score        Float
+  label        String
+  inputs       Json
+  modelVersion String   @map("model_version")
+  computedAt   DateTime @default(now()) @map("computed_at") @db.Timestamptz(3)
+
+  @@map("market_weather_daily")
+}
+
+// score 0..100; inputs holds C1..C3.
+model AltSeasonDaily {
+  date         DateTime @id @db.Date
+  score        Float
+  phase        String
+  inputs       Json     @default("{}")
+  modelVersion String   @map("model_version")
+  computedAt   DateTime @default(now()) @map("computed_at") @db.Timestamptz(3)
+
+  @@map("alt_season_daily")
+}
+
+model BtcOutlookDaily {
+  date         DateTime @id @db.Date
+  regime       String
+  fuel         String
+  fragility    String
+  inputs       Json
+  sentence     String
+  modelVersion String   @map("model_version")
+  computedAt   DateTime @default(now()) @map("computed_at") @db.Timestamptz(3)
+
+  @@map("btc_outlook_daily")
+}
+
+// Zones, never exact lines: low..high. strength_points per master plan K (2 per method ...).
+model KeyLevel {
+  id             BigInt    @id @default(autoincrement())
+  assetId        String    @map("asset_id")
+  date           DateTime  @db.Date
+  kind           LevelKind
+  low            Decimal   @db.Decimal(38, 18)
+  high           Decimal   @db.Decimal(38, 18)
+  strengthPoints Int       @map("strength_points")
+  strengthLabel  String    @map("strength_label")
+  methods        String[]  @default([])
+  modelVersion   String    @map("model_version")
+  computedAt     DateTime  @default(now()) @map("computed_at") @db.Timestamptz(3)
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@unique([assetId, date, kind, low, high])
+  @@index([assetId, date])
+  @@index([date])
+  @@map("key_levels")
+}
+
+// Base / upside / downside path, each with the trigger that would confirm it.
+model Scenario {
+  assetId      String       @map("asset_id")
+  date         DateTime     @db.Date
+  kind         ScenarioKind
+  description  String
+  trigger      String
+  triggerPrice Decimal?     @map("trigger_price") @db.Decimal(38, 18)
+  modelVersion String       @map("model_version")
+  computedAt   DateTime     @default(now()) @map("computed_at") @db.Timestamptz(3)
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@id([assetId, date, kind])
+  @@index([date])
+  @@map("scenarios")
+}
+
+// Append-only. dedupe_key makes the signal run idempotent (for example
+// 'SG5:bank:2026-10-24'). before / after hold the state the signal compared.
+model Signal {
+  id         BigInt   @id @default(autoincrement())
+  code       String // SG1..SG14, checked in SQL
+  assetId    String?  @map("asset_id")
+  marketWide Boolean  @default(false) @map("market_wide")
+  firedAt    DateTime @map("fired_at") @db.Timestamptz(3)
+  before     Json?
+  after      Json?
+  what       String
+  why        String
+  checkText  String   @map("check_text")
+  dedupeKey  String   @unique @map("dedupe_key")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  asset Asset? @relation(fields: [assetId], references: [id])
+
+  @@index([firedAt])
+  @@index([assetId, firedAt])
+  @@index([code, firedAt])
+  @@map("signals")
+}
+
+// kind examples: 'archetype', 'quadrant', 'regime_fuel'. thin_history = n under 30 windows.
+model BaseRate {
+  id              BigInt   @id @default(autoincrement())
+  kind            String
+  key             String
+  horizonDays     Int      @map("horizon_days")
+  n               Int
+  shareUp         Float?   @map("share_up")
+  medianReturn    Float?   @map("median_return")
+  shareDrawdown20 Float?   @map("share_drawdown_20")
+  thinHistory     Boolean  @default(true) @map("thin_history")
+  modelVersion    String   @map("model_version")
+  computedAt      DateTime @default(now()) @map("computed_at") @db.Timestamptz(3)
+
+  @@unique([kind, key, horizonDays, modelVersion])
+  @@map("base_rates")
+}
+
+// One row per job and run date: the idempotency record for every scheduled job.
+// status examples: 'running', 'succeeded', 'failed'.
+model JobRun {
+  id         BigInt    @id @default(autoincrement())
+  job        String
+  runDate    DateTime  @map("run_date") @db.Date
+  status     String
+  startedAt  DateTime  @map("started_at") @db.Timestamptz(3)
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz(3)
+  rows       Int?
+  error      String?
+
+  @@unique([job, runDate])
+  @@index([runDate])
+  @@map("job_runs")
+}
+
+// ---------------------------------------------------------------------------
+// Users: Auth.js Prisma adapter models. Model names and the Prisma field names of
+// Account, Session and VerificationToken must stay exactly as @auth/prisma-adapter
+// expects; only the table and column names are remapped.
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime? @map("email_verified") @db.Timestamptz(3)
+  image         String?
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  accounts          Account[]
+  sessions          Session[]
+  profile           Profile?
+  holdings          Holding[]
+  watchlistItems    WatchlistItem[]
+  alerts            Alert[]
+  notificationPrefs NotificationPref?
+  pushSubscriptions PushSubscription[]
+  lessonProgress    LessonProgress[]
+  streak            Streak?
+  subscription      Subscription?
+
+  @@map("users")
+}
+
+model Account {
+  id                       String  @id @default(cuid())
+  userId                   String  @map("user_id")
+  type                     String
+  provider                 String
+  providerAccountId        String  @map("provider_account_id")
+  refresh_token            String? @db.Text
+  access_token             String? @db.Text
+  expires_at               Int?
+  refresh_token_expires_in Int?
+  token_type               String?
+  scope                    String?
+  id_token                 String? @db.Text
+  session_state            String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime @db.Timestamptz(3)
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// Quiz answers. Fields stay null until the user answers; onboarding_done_at marks completion.
+model Profile {
+  userId           String       @id @map("user_id")
+  knowledge        Int?         @db.SmallInt // 1..4, checked in SQL
+  goal             Goal?
+  horizon          Horizon?
+  risk             RiskProfile?
+  sectors          String[]     @default([]) // sectors.id values the user is interested in
+  onboardingDoneAt DateTime?    @map("onboarding_done_at") @db.Timestamptz(3)
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+// Hand-entered. amount is optional (no amounts required).
+model Holding {
+  id      BigInt   @id @default(autoincrement())
+  userId  String   @map("user_id")
+  assetId String   @map("asset_id")
+  amount  Decimal? @db.Decimal(38, 8)
+  addedAt DateTime @default(now()) @map("added_at") @db.Timestamptz(3)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@unique([userId, assetId])
+  @@index([assetId])
+  @@map("holdings")
+}
+
+model WatchlistItem {
+  userId  String   @map("user_id")
+  assetId String   @map("asset_id")
+  addedAt DateTime @default(now()) @map("added_at") @db.Timestamptz(3)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@id([userId, assetId])
+  @@index([assetId])
+  @@map("watchlist_items")
+}
+
+// asset_id null = market-wide alert. kind and params are defined by the alerts task.
+model Alert {
+  id        BigInt       @id @default(autoincrement())
+  userId    String       @map("user_id")
+  assetId   String?      @map("asset_id")
+  kind      String
+  params    Json         @default("{}")
+  channel   AlertChannel
+  active    Boolean      @default(true)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  asset Asset? @relation(fields: [assetId], references: [id])
+
+  @@index([userId])
+  @@index([assetId])
+  @@map("alerts")
+}
+
+// Pro gating of the real-time options happens in the app, not here.
+model NotificationPref {
+  userId            String   @id @map("user_id")
+  weeklyDigestEmail Boolean  @default(true) @map("weekly_digest_email")
+  realtimePush      Boolean  @default(true) @map("realtime_push")
+  realtimeEmail     Boolean  @default(true) @map("realtime_email")
+  timezone          String?
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_prefs")
+}
+
+// Web Push subscription (PWA). endpoint is unique per browser install.
+model PushSubscription {
+  id         BigInt    @id @default(autoincrement())
+  userId     String    @map("user_id")
+  endpoint   String    @unique
+  p256dh     String
+  auth       String
+  userAgent  String?   @map("user_agent")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastUsedAt DateTime? @map("last_used_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
+// A row exists once the lesson is completed.
+model LessonProgress {
+  userId      String   @map("user_id")
+  lessonId    String   @map("lesson_id")
+  completedAt DateTime @default(now()) @map("completed_at") @db.Timestamptz(3)
+  quizScore   Int?     @map("quiz_score")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id])
+
+  @@id([userId, lessonId])
+  @@index([lessonId])
+  @@map("lesson_progress")
+}
+
+model Streak {
+  userId           String    @id @map("user_id")
+  currentStreak    Int       @default(0) @map("current_streak")
+  longestStreak    Int       @default(0) @map("longest_streak")
+  lastActivityDate DateTime? @map("last_activity_date") @db.Date
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("streaks")
+}
+
+// One row per user holding the latest Stripe subscription. status is Stripe's status string
+// (trialing, active, past_due, canceled, unpaid, incomplete, incomplete_expired, paused).
+// Entitlement = status in (trialing, active).
+model Subscription {
+  id                   BigInt    @id @default(autoincrement())
+  userId               String    @unique @map("user_id")
+  stripeCustomerId     String    @unique @map("stripe_customer_id")
+  stripeSubscriptionId String?   @unique @map("stripe_subscription_id")
+  status               String
+  priceId              String?   @map("price_id")
+  currentPeriodEnd     DateTime? @map("current_period_end") @db.Timestamptz(3)
+  trialEnd             DateTime? @map("trial_end") @db.Timestamptz(3)
+  cancelAtPeriodEnd    Boolean   @default(false) @map("cancel_at_period_end")
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("subscriptions")
+}
+
+// Webhook idempotency: insert the event id in the same transaction as the entitlement
+// update; a unique violation means the event was already handled.
+model StripeEvent {
+  eventId     String   @id @map("event_id")
+  type        String
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(3)
+
+  @@map("stripe_events")
+}
+
+// ---------------------------------------------------------------------------
+// Content (authored; LLM drafts need human review, strict schema, no numbers)
+// ---------------------------------------------------------------------------
+
+// id is the lesson slug. body is structured JSON validated by the app.
+model Lesson {
+  id               String   @id
+  position         Int      @unique
+  title            String
+  summary          String?
+  estimatedMinutes Int?     @map("estimated_minutes")
+  body             Json
+  published        Boolean  @default(false)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  quickChecks    QuickCheck[]
+  lessonProgress LessonProgress[]
+
+  @@map("lessons")
+}
+
+// options is a JSON array of answer texts; correct_index points into it (checked in SQL).
+model QuickCheck {
+  id           BigInt  @id @default(autoincrement())
+  lessonId     String  @map("lesson_id")
+  position     Int
+  question     String
+  options      Json
+  correctIndex Int     @map("correct_index")
+  explanation  String?
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([lessonId, position])
+  @@map("quick_checks")
+}
+
+model GlossaryTerm {
+  slug      String   @id
+  term      String   @unique
+  oneLine   String   @map("one_line")
+  body      String
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("glossary_terms")
+}
+
+// The four "In plain words" cards. reviewed_by / reviewed_at stay null until a human
+// has reviewed the text; the app shows only reviewed explainers.
+model AssetExplainer {
+  assetId         String    @id @map("asset_id")
+  whatItIs        String    @map("what_it_is")
+  whoUsesIt       String    @map("who_uses_it")
+  howItMakesMoney String    @map("how_it_makes_money")
+  whereToGetIt    String    @map("where_to_get_it")
+  reviewedBy      String?   @map("reviewed_by")
+  reviewedAt      DateTime? @map("reviewed_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@map("asset_explainers")
+}
