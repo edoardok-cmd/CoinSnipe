@@ -1,0 +1,29 @@
+# dependencies
+node_modules/
+
+# build output
+.next/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# test output
+coverage/
+playwright-report/
+test-results/
+packages/backtest/out/
+
+# turbo cache
+.turbo/
+
+# environment (keep the template tracked)
+.env
+.env.*
+!.env.example
+
+# per-task git worktrees
+task-folders/
+
+# OS / editor
+.DS_Store
+*.log
