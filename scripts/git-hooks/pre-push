@@ -3,12 +3,13 @@
 # This repo is public; those docs live in the private Agent X workspace. Scans every object
 # reachable from the refs being pushed that the remote does not already have, so an old task
 # branch carrying the docs in an ancestor commit is refused too, not just the tip tree.
+# $1 is the remote name git passes in; only objects THAT remote lacks are scanned.
 # Install (shared by all worktrees): cp scripts/git-hooks/pre-push "$(git rev-parse --git-common-dir)/hooks/pre-push"
 zero=0000000000000000000000000000000000000000
 bad=0
 while read -r local_ref local_sha remote_ref remote_sha; do
   [ "$local_sha" = "$zero" ] && continue
-  hits=$(git rev-list --objects "$local_sha" --not --remotes 2>/dev/null \
+  hits=$(git rev-list --objects "$local_sha" --not --remotes="$1" 2>/dev/null \
     | grep -E ' (docs/decisions\.md|docs/data-licensing\.md)$' || true)
   if [ -n "$hits" ]; then
     echo "pre-push: refusing $local_ref -> $remote_ref: history contains private cost docs:" >&2
