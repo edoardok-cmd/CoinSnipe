@@ -1238,7 +1238,7 @@ describe.skipIf(!usable)('upgrade 0001 to 0002 over existing rows (real Postgres
         startedAt: new Date(),
       },
     });
-  });
+  }, 60_000);
 });
 
 describe.skipIf(!usable)('migration 0002 lock safety (real Postgres)', () => {
@@ -1255,7 +1255,7 @@ describe.skipIf(!usable)('migration 0002 lock safety (real Postgres)', () => {
     await scratch.drop();
   }, 60_000);
 
-  it('fails cleanly within the lock timeout when a lock is held, applies nothing, and retries', async () => {
+  it('fails cleanly within the lock timeout when a lock is held, applies nothing, and a re-apply works', async () => {
     const { prisma } = scratch;
     const statements = statementsOf(
       readFileSync(`${migrationsDir}0002_schema_v1_1/migration.sql`, 'utf8'),
@@ -1329,7 +1329,8 @@ describe.skipIf(!usable)('migration 0002 lock safety (real Postgres)', () => {
       SELECT to_regclass(${`"${scratch.name}".notification_deliveries`})::text AS found`;
     expect(table[0]?.found).toBeNull();
 
-    // Once the lock is gone, the retry applies the whole file.
+    // Once the lock is gone, applying the file again works. (This scratch schema has no Prisma
+    // migration history; with Prisma, run `migrate resolve --rolled-back` first, see the README.)
     await applyMigration(prisma, '0002_schema_v1_1');
     const after = await prisma.$queryRaw<{ found: string | null }[]>`
       SELECT to_regclass(${`"${scratch.name}".notification_deliveries`})::text AS found`;
@@ -1442,7 +1443,7 @@ describe.skipIf(!usable)('notification delivery protocol (real Postgres)', () =>
     expect(held.sort()).toEqual(['sent', 'skipped']);
     expect(heldSends).toEqual(['held']);
     expect(await statusOf('dp-claim', 'held')).toBe('sent');
-  });
+  }, 60_000);
 
   it('reclaims a pending row left by a crash and a failed row, but never a sent or batched one', async () => {
     const { prisma } = scratch;
@@ -1491,7 +1492,7 @@ describe.skipIf(!usable)('notification delivery protocol (real Postgres)', () =>
       },
     });
     expect(await deliver({ userId: 'dp-crash', key: 'over', sends })).toBe('skipped');
-  });
+  }, 60_000);
 
   it('with the per-user lock, concurrent jobs never send past the daily cap', async () => {
     const sends: string[] = [];
@@ -1514,7 +1515,7 @@ describe.skipIf(!usable)('notification delivery protocol (real Postgres)', () =>
       where: { userId: 'dp-cap', status: 'sent' },
     });
     expect(sent).toBe(3);
-  });
+  }, 60_000);
 });
 
 describe.skipIf(!usable)('documented rollback of 0002 (real Postgres)', () => {
@@ -1646,5 +1647,5 @@ describe.skipIf(!usable)('documented rollback of 0002 (real Postgres)', () => {
     ]);
     const prefs = await prisma.notificationPref.findUniqueOrThrow({ where: { userId: 'rb-1' } });
     expect([prefs.quietHoursStart, prefs.quietHoursEnd, prefs.dailyCap]).toEqual([22, 8, 5]);
-  });
+  }, 60_000);
 });

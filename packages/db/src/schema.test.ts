@@ -451,10 +451,16 @@ describe('lock safety, seed wording and rollback honesty in 0002 (review fixes)'
     expect(migration0002.match(/lock_timeout/g)?.length).toBeGreaterThanOrEqual(2); // header + statement
   });
 
-  it('states the deadlock risk, quiet writers and the retry in the Safety section', () => {
+  it('states the deadlock risk, quiet writers and the resolve-then-deploy recovery in the Safety section', () => {
     expect(flat).toMatch(/Apply 0002 while writers are quiet or stopped/);
     expect(flat).toMatch(/can deadlock with this file/);
-    expect(flat).toMatch(/lock_timeout or deadlock failure is safe: nothing is applied/);
+    expect(flat).toMatch(/lock_timeout or deadlock failure is safe, nothing is applied/);
+    // Recovery after a failed apply: Prisma records 0002 as failed, so resolve before deploying again.
+    expect(flat).toMatch(/P3009/);
+    expect(flat).toMatch(
+      /after a failed apply run `prisma migrate resolve --rolled-back 0002_schema_v1_1` and then deploy again/,
+    );
+    expect(flat).toMatch(/pipeline that retries the deploy needs that resolve step/);
     expect(flat).not.toMatch(/concurrent writers wait for the commit\./);
   });
 
@@ -501,6 +507,11 @@ describe('lock safety, seed wording and rollback honesty in 0002 (review fixes)'
     expect(readme).toMatch(/SET LOCAL lock_timeout = '5s'/);
     expect(readme).toMatch(/while writers are quiet or stopped/);
     expect(readme).toMatch(/can deadlock with the migration/);
+    expect(readme).toMatch(/fails with P3009/);
+    expect(readme).toMatch(
+      /after a failed apply run `prisma migrate resolve --rolled-back <name>` \(for 0002: `prisma migrate resolve --rolled-back 0002_schema_v1_1`\) and then deploy again/,
+    );
+    expect(readme).toMatch(/Any pipeline that retries the deploy needs that resolve step/);
     expect(readme).toMatch(/original `job_runs` status text, which is lost after a revert/);
   });
 
@@ -511,10 +522,41 @@ describe('lock safety, seed wording and rollback honesty in 0002 (review fixes)'
     expect(readme).toMatch(
       /pg_advisory_xact_lock\(hashtextextended\('notify:' \|\| <user_id>, 0\)\)/,
     );
-    expect(readme).toMatch(/FROM notification_prefs WHERE user_id = <user_id> FOR UPDATE/);
+    // One recipe: the advisory lock. FOR UPDATE on the optional prefs row is warned against.
+    expect(readme).toMatch(/Take a per-user advisory lock first/);
+    expect(readme).toMatch(
+      /Do not use `SELECT \.\.\. FOR UPDATE` on the user's `notification_prefs` row instead/,
+    );
+    expect(readme).not.toMatch(
+      /, or `SELECT 1 FROM notification_prefs WHERE user_id = <user_id> FOR UPDATE`/,
+    );
+    expect(schemaPrisma).toMatch(/FOR UPDATE on\n\/\/ notification_prefs is not a substitute/);
     expect(readme).toMatch(/at least once/);
     expect(readme).not.toMatch(/DO NOTHING` and send only when a row was inserted/);
     expect(schemaPrisma).toMatch(/WHERE status IN \('pending', 'failed'\) RETURNING id/);
     expect(schemaPrisma).toMatch(/per-user advisory lock/);
+  });
+
+  it('sweep: no bare retry or rerun claim after a lock timeout or deadlock, it must name the resolve step', () => {
+    const sentences = (text: string) => text.split(/(?<=[.:])\s+/);
+    for (const [name, text] of [
+      ['migration 0002 header', flat],
+      ['README', readme],
+      ['schema.prisma', schemaPrisma.replace(/\n\/\/\s*/g, ' ')],
+    ] as const) {
+      for (const sentence of sentences(text)) {
+        const aboutFailure = /lock_timeout|lock timeout|deadlock|lock is not available/i.test(
+          sentence,
+        );
+        const claimsRetry = /\b(simply retried|rerun|re-run|retried|retry|retries)\b/i.test(
+          sentence,
+        );
+        if (aboutFailure && claimsRetry) {
+          expect(sentence, `${name}: ${sentence}`).toMatch(/resolve --rolled-back/);
+        }
+      }
+    }
+    expect(flat).not.toMatch(/deploy is simply retried|rerun when quiet/);
+    expect(readme).not.toMatch(/and you rerun it/);
   });
 });

@@ -21,8 +21,11 @@
 --   * Prisma runs this file as one multi-statement query, that is one transaction: it
 --     applies completely or not at all. The first statement is SET LOCAL lock_timeout =
 --     '5s': if any lock cannot be had within 5 seconds the statement fails, the whole file
---     rolls back (nothing is applied; database.test.ts checks this with a held lock) and
---     the deploy is simply retried.
+--     rolls back (nothing is applied; database.test.ts checks this with a held lock). Prisma
+--     still records 0002 as failed, so a plain `prisma migrate deploy` rerun exits with
+--     P3009: after a failed apply run `prisma migrate resolve --rolled-back
+--     0002_schema_v1_1` and then deploy again. A pipeline that retries the deploy needs
+--     that resolve step in its retry.
 --   * Apply 0002 while writers are quiet or stopped (worker paused, no app traffic).
 --     ALTER TABLE takes ACCESS EXCLUSIVE on its table and holds it until commit, so no
 --     writer can interleave between the nullable add, the backfill and the SET NOT NULL
@@ -36,7 +39,9 @@
 --     users and signals for the new foreign keys. Measured in review with 8 concurrent
 --     writers: 16 application transactions aborted with "deadlock detected". Postgres
 --     aborts one side; if it picks the migration, the file rolls back whole. A
---     lock_timeout or deadlock failure is safe: nothing is applied, rerun when quiet.
+--     lock_timeout or deadlock failure is safe, nothing is applied: resolve it as
+--     above (`prisma migrate resolve --rolled-back 0002_schema_v1_1`), then deploy again
+--     when writers are quiet.
 --   * New NOT NULL columns on existing tables (job_runs.run_key, job_runs.details,
 --     notification_prefs.quiet_hours_start / quiet_hours_end / daily_cap) use the 3-step
 --     pattern: nullable add, backfill, SET DEFAULT and SET NOT NULL.

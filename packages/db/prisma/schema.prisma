@@ -954,7 +954,8 @@ model PushSubscription {
 // channel, dedupe_key) DO UPDATE ... WHERE status IN ('pending', 'failed') RETURNING id inside
 // one transaction that also sends and marks the row, and skips when no row comes back, so a
 // re-run in the same slot cannot send twice and a pending or failed row can be retried. Take
-// a per-user advisory lock (or FOR UPDATE on the user's notification_prefs row) around the
+// a per-user advisory lock (pg_advisory_xact_lock keyed on the user; FOR UPDATE on
+// notification_prefs is not a substitute because that row may not exist) around the
 // daily-cap count and the claim. Full recipe: README, "For CSN-060".
 // dedupe_key convention: 'signal:<signals.id>' for a signal, 'alert:<alerts.id>:<UTC hour>'
 // for an alert rule (for example 'alert:42:2026-10-24T13', so the hourly SG12 job fires at
