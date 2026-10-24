@@ -1,0 +1,167 @@
+[
+  {
+    "id": "1001",
+    "name": "Uniswap V3",
+    "symbol": "UNI",
+    "chain": "Multi-Chain",
+    "gecko_id": null,
+    "category": "Dexs",
+    "slug": "uniswap-v3",
+    "tvl": 3000,
+    "parentProtocol": "parent#uniswap"
+  },
+  {
+    "id": "1002",
+    "name": "Uniswap V2",
+    "symbol": "UNI",
+    "chain": "Multi-Chain",
+    "gecko_id": null,
+    "category": "Dexs",
+    "slug": "uniswap-v2",
+    "tvl": 2000,
+    "parentProtocol": "parent#uniswap"
+  },
+  {
+    "id": "1003",
+    "name": "Aave V3",
+    "symbol": "AAVE",
+    "chain": "Multi-Chain",
+    "gecko_id": null,
+    "category": "Lending",
+    "slug": "aave-v3",
+    "tvl": 5000,
+    "parentProtocol": "parent#aave"
+  },
+  {
+    "id": "1004",
+    "name": "Aave V2",
+    "symbol": "AAVE",
+    "chain": "Multi-Chain",
+    "gecko_id": "aave",
+    "category": "Lending",
+    "slug": "aave-v2",
+    "tvl": 1000,
+    "parentProtocol": "parent#aave"
+  },
+  {
+    "id": "1005",
+    "name": "Lido",
+    "symbol": "LDO",
+    "chain": "Multi-Chain",
+    "gecko_id": "lido-dao",
+    "category": "Liquid Staking",
+    "slug": "lido",
+    "tvl": 9000,
+    "parentProtocol": null
+  },
+  {
+    "id": "1006",
+    "name": "Hyperliquid Perps",
+    "symbol": "HYPE",
+    "chain": "Multi-Chain",
+    "gecko_id": "hyperliquid",
+    "category": "Derivatives",
+    "slug": "hyperliquid-perps",
+    "tvl": 700,
+    "parentProtocol": null
+  },
+  {
+    "id": "1007",
+    "name": "Ethereum Foundation",
+    "symbol": "ETH",
+    "chain": "Multi-Chain",
+    "gecko_id": "ethereum",
+    "category": "Foundation",
+    "slug": "ethereum-foundation",
+    "tvl": 0,
+    "parentProtocol": null
+  },
+  {
+    "id": "1008",
+    "name": "OKX",
+    "symbol": "OKB",
+    "chain": "Multi-Chain",
+    "gecko_id": "okb",
+    "category": "CEX",
+    "slug": "okx",
+    "tvl": 400,
+    "parentProtocol": null
+  },
+  {
+    "id": "1009",
+    "name": "Arbitrum Bridge",
+    "symbol": "ARB",
+    "chain": "Multi-Chain",
+    "gecko_id": "arbitrum",
+    "category": "Canonical Bridge",
+    "slug": "arbitrum-bridge",
+    "tvl": 300,
+    "parentProtocol": null
+  },
+  {
+    "id": "1010",
+    "name": "Raydium",
+    "symbol": "RAY",
+    "chain": "Multi-Chain",
+    "gecko_id": null,
+    "category": "Dexs",
+    "slug": "raydium",
+    "tvl": 600,
+    "parentProtocol": null
+  },
+  {
+    "id": "1011",
+    "name": "Sample Fuzz V2",
+    "symbol": "SFZ",
+    "chain": "Multi-Chain",
+    "gecko_id": null,
+    "category": "Lending",
+    "slug": "sample-fuzz-v2",
+    "tvl": 50,
+    "parentProtocol": "parent#sample-fuzz"
+  },
+  {
+    "id": "1012",
+    "name": "Sample Fuzz V1",
+    "symbol": "SFZ",
+    "chain": "Multi-Chain",
+    "gecko_id": null,
+    "category": "Lending",
+    "slug": "sample-fuzz-v1",
+    "tvl": 10,
+    "parentProtocol": "parent#sample-fuzz"
+  },
+  {
+    "id": "1013",
+    "name": "Sample Dex",
+    "symbol": "SDEX",
+    "chain": "Multi-Chain",
+    "gecko_id": "sample-dex-token",
+    "category": "Dexs",
+    "slug": "sample-dex",
+    "tvl": 80,
+    "parentProtocol": null
+  },
+  {
+    "id": "1014",
+    "name": "Solana Farm",
+    "symbol": "SOL",
+    "chain": "Multi-Chain",
+    "gecko_id": null,
+    "category": "Dexs",
+    "slug": "solana-farm",
+    "tvl": 5,
+    "parentProtocol": null
+  },
+  {
+    "id": "1015",
+    "name": "Uniswap Labs",
+    "symbol": "-",
+    "chain": "Multi-Chain",
+    "gecko_id": null,
+    "category": "Developer Tools",
+    "slug": "uniswap-labs",
+    "tvl": null,
+    "parentProtocol": null
+  }
+]

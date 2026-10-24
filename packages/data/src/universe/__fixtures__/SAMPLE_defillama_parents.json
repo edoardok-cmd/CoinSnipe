@@ -1,0 +1,25 @@
+[
+  {
+    "id": "parent#uniswap",
+    "name": "Uniswap",
+    "symbol": "UNI",
+    "gecko_id": "uniswap"
+  },
+  {
+    "id": "parent#aave",
+    "name": "Aave",
+    "symbol": "AAVE",
+    "gecko_id": "aave"
+  },
+  {
+    "id": "parent#ethereum-foundation",
+    "name": "Ethereum Foundation",
+    "symbol": "ETH",
+    "gecko_id": "ethereum"
+  },
+  {
+    "id": "parent#sample-fuzz",
+    "name": "Sample Fuzz",
+    "symbol": "SFZ"
+  }
+]

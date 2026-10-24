@@ -1,0 +1,821 @@
+{
+  "notes": "sampleSeed has the Score Lab sample-universe assignments (symbol, name, sector_id, chain, narrative_ids only), keyed by CoinGecko id; they win over the automatic sector and narrative mapping. coins has manual overrides and wins over everything; see UniverseOverrides in buildUniverse.ts.",
+  "sampleSeed": {
+    "bitcoin": {
+      "symbol": "BTC",
+      "name": "Bitcoin",
+      "sectorId": "gold",
+      "chain": "Own chain",
+      "narrativeIds": ["etf", "btcfi"]
+    },
+    "litecoin": {
+      "symbol": "LTC",
+      "name": "Litecoin",
+      "sectorId": "gold",
+      "chain": "Own chain",
+      "narrativeIds": ["etf"]
+    },
+    "bitcoin-cash": {
+      "symbol": "BCH",
+      "name": "Bitcoin Cash",
+      "sectorId": "gold",
+      "chain": "Own chain",
+      "narrativeIds": []
+    },
+    "ethereum-classic": {
+      "symbol": "ETC",
+      "name": "Ethereum Classic",
+      "sectorId": "gold",
+      "chain": "Own chain",
+      "narrativeIds": []
+    },
+    "kaspa": {
+      "symbol": "KAS",
+      "name": "Kaspa",
+      "sectorId": "gold",
+      "chain": "Own chain",
+      "narrativeIds": []
+    },
+    "pax-gold": {
+      "symbol": "PAXG",
+      "name": "PAX Gold",
+      "sectorId": "gold",
+      "chain": "Ethereum",
+      "narrativeIds": ["rwa"]
+    },
+    "tether-gold": {
+      "symbol": "XAUT",
+      "name": "Tether Gold",
+      "sectorId": "gold",
+      "chain": "Ethereum",
+      "narrativeIds": ["rwa"]
+    },
+    "ethereum": {
+      "symbol": "ETH",
+      "name": "Ethereum",
+      "sectorId": "platforms",
+      "chain": "Own chain",
+      "narrativeIds": ["etf", "restake"]
+    },
+    "solana": {
+      "symbol": "SOL",
+      "name": "Solana",
+      "sectorId": "platforms",
+      "chain": "Own chain",
+      "narrativeIds": ["etf", "solana"]
+    },
+    "binancecoin": {
+      "symbol": "BNB",
+      "name": "BNB",
+      "sectorId": "platforms",
+      "chain": "Own chain",
+      "narrativeIds": ["cex", "revenue"]
+    },
+    "cardano": {
+      "symbol": "ADA",
+      "name": "Cardano",
+      "sectorId": "platforms",
+      "chain": "Own chain",
+      "narrativeIds": ["etf"]
+    },
+    "avalanche-2": {
+      "symbol": "AVAX",
+      "name": "Avalanche",
+      "sectorId": "platforms",
+      "chain": "Own chain",
+      "narrativeIds": ["etf", "rwa"]
+    },
+    "sui": {
+      "symbol": "SUI",
+      "name": "Sui",
+      "sectorId": "platforms",
+      "chain": "Own chain",
+      "narrativeIds": ["fastl1"]
+    },
+    "the-open-network": {
+      "symbol": "TON",
+      "name": "Toncoin",
+      "sectorId": "platforms",
+      "chain": "Own chain",
+      "narrativeIds": []
+    },
+    "crypto-com-chain": {
+      "symbol": "CRO",
+      "name": "Cronos",
+      "sectorId": "platforms",
+      "chain": "Own chain",
+      "narrativeIds": ["cex"]
+    },
+    "okb": {
+      "symbol": "OKB",
+      "name": "OKB",
+      "sectorId": "platforms",
+      "chain": "Own chain",
+      "narrativeIds": ["cex"]
+    },
+    "aptos": {
+      "symbol": "APT",
+      "name": "Aptos",
+      "sectorId": "platforms",
+      "chain": "Own chain",
+      "narrativeIds": ["fastl1", "rwa"]
+    },
+    "internet-computer": {
+      "symbol": "ICP",
+      "name": "Internet Computer",
+      "sectorId": "platforms",
+      "chain": "Own chain",
+      "narrativeIds": ["agents"]
+    },
+    "sei-network": {
+      "symbol": "SEI",
+      "name": "Sei",
+      "sectorId": "platforms",
+      "chain": "Own chain",
+      "narrativeIds": ["fastl1"]
+    },
+    "injective-protocol": {
+      "symbol": "INJ",
+      "name": "Injective",
+      "sectorId": "platforms",
+      "chain": "Own chain",
+      "narrativeIds": ["perps", "rwa"]
+    },
+    "sonic-3": {
+      "symbol": "S",
+      "name": "Sonic",
+      "sectorId": "platforms",
+      "chain": "Own chain",
+      "narrativeIds": ["fastl1"]
+    },
+    "tezos": {
+      "symbol": "XTZ",
+      "name": "Tezos",
+      "sectorId": "platforms",
+      "chain": "Own chain",
+      "narrativeIds": []
+    },
+    "elrond-erd-2": {
+      "symbol": "EGLD",
+      "name": "MultiversX",
+      "sectorId": "platforms",
+      "chain": "Own chain",
+      "narrativeIds": []
+    },
+    "flow": {
+      "symbol": "FLOW",
+      "name": "Flow",
+      "sectorId": "platforms",
+      "chain": "Own chain",
+      "narrativeIds": ["gaming"]
+    },
+    "berachain-bera": {
+      "symbol": "BERA",
+      "name": "Berachain",
+      "sectorId": "platforms",
+      "chain": "Own chain",
+      "narrativeIds": []
+    },
+    "arbitrum": {
+      "symbol": "ARB",
+      "name": "Arbitrum",
+      "sectorId": "scaling",
+      "chain": "Ethereum",
+      "narrativeIds": ["modular"]
+    },
+    "polygon-ecosystem-token": {
+      "symbol": "POL",
+      "name": "Polygon",
+      "sectorId": "scaling",
+      "chain": "Ethereum",
+      "narrativeIds": ["modular", "stable"]
+    },
+    "mantle": {
+      "symbol": "MNT",
+      "name": "Mantle",
+      "sectorId": "scaling",
+      "chain": "Ethereum",
+      "narrativeIds": ["modular", "cex"]
+    },
+    "optimism": {
+      "symbol": "OP",
+      "name": "Optimism",
+      "sectorId": "scaling",
+      "chain": "Ethereum",
+      "narrativeIds": ["modular", "base"]
+    },
+    "celestia": {
+      "symbol": "TIA",
+      "name": "Celestia",
+      "sectorId": "scaling",
+      "chain": "Own chain",
+      "narrativeIds": ["modular"]
+    },
+    "blockstack": {
+      "symbol": "STX",
+      "name": "Stacks",
+      "sectorId": "scaling",
+      "chain": "Bitcoin",
+      "narrativeIds": ["btcfi"]
+    },
+    "starknet": {
+      "symbol": "STRK",
+      "name": "Starknet",
+      "sectorId": "scaling",
+      "chain": "Ethereum",
+      "narrativeIds": ["modular", "btcfi"]
+    },
+    "zksync": {
+      "symbol": "ZK",
+      "name": "ZKsync",
+      "sectorId": "scaling",
+      "chain": "Ethereum",
+      "narrativeIds": ["modular"]
+    },
+    "ripple": {
+      "symbol": "XRP",
+      "name": "XRP",
+      "sectorId": "payments",
+      "chain": "Own chain",
+      "narrativeIds": ["etf", "stable"]
+    },
+    "tron": {
+      "symbol": "TRX",
+      "name": "Tron",
+      "sectorId": "payments",
+      "chain": "Own chain",
+      "narrativeIds": ["stable"]
+    },
+    "stellar": {
+      "symbol": "XLM",
+      "name": "Stellar",
+      "sectorId": "payments",
+      "chain": "Own chain",
+      "narrativeIds": ["stable", "rwa"]
+    },
+    "hedera-hashgraph": {
+      "symbol": "HBAR",
+      "name": "Hedera",
+      "sectorId": "payments",
+      "chain": "Own chain",
+      "narrativeIds": ["etf", "rwa"]
+    },
+    "algorand": {
+      "symbol": "ALGO",
+      "name": "Algorand",
+      "sectorId": "payments",
+      "chain": "Own chain",
+      "narrativeIds": ["rwa"]
+    },
+    "xdce-crowd-sale": {
+      "symbol": "XDC",
+      "name": "XDC Network",
+      "sectorId": "payments",
+      "chain": "Own chain",
+      "narrativeIds": ["rwa"]
+    },
+    "celo": {
+      "symbol": "CELO",
+      "name": "Celo",
+      "sectorId": "payments",
+      "chain": "Ethereum",
+      "narrativeIds": ["stable"]
+    },
+    "hyperliquid": {
+      "symbol": "HYPE",
+      "name": "Hyperliquid",
+      "sectorId": "bank",
+      "chain": "Own chain",
+      "narrativeIds": ["perps", "revenue"]
+    },
+    "uniswap": {
+      "symbol": "UNI",
+      "name": "Uniswap",
+      "sectorId": "bank",
+      "chain": "Ethereum",
+      "narrativeIds": ["revenue", "base"]
+    },
+    "aave": {
+      "symbol": "AAVE",
+      "name": "Aave",
+      "sectorId": "bank",
+      "chain": "Ethereum",
+      "narrativeIds": ["revenue"]
+    },
+    "ethena": {
+      "symbol": "ENA",
+      "name": "Ethena",
+      "sectorId": "bank",
+      "chain": "Ethereum",
+      "narrativeIds": ["stable"]
+    },
+    "jupiter-exchange-solana": {
+      "symbol": "JUP",
+      "name": "Jupiter",
+      "sectorId": "bank",
+      "chain": "Solana",
+      "narrativeIds": ["solana", "perps"]
+    },
+    "sky": {
+      "symbol": "SKY",
+      "name": "Sky",
+      "sectorId": "bank",
+      "chain": "Ethereum",
+      "narrativeIds": ["stable", "rwa"]
+    },
+    "lido-dao": {
+      "symbol": "LDO",
+      "name": "Lido",
+      "sectorId": "bank",
+      "chain": "Ethereum",
+      "narrativeIds": ["restake"]
+    },
+    "curve-dao-token": {
+      "symbol": "CRV",
+      "name": "Curve",
+      "sectorId": "bank",
+      "chain": "Ethereum",
+      "narrativeIds": ["stable"]
+    },
+    "pancakeswap-token": {
+      "symbol": "CAKE",
+      "name": "PancakeSwap",
+      "sectorId": "bank",
+      "chain": "BNB Chain",
+      "narrativeIds": ["revenue"]
+    },
+    "aerodrome-finance": {
+      "symbol": "AERO",
+      "name": "Aerodrome",
+      "sectorId": "bank",
+      "chain": "Base",
+      "narrativeIds": ["base", "revenue"]
+    },
+    "raydium": {
+      "symbol": "RAY",
+      "name": "Raydium",
+      "sectorId": "bank",
+      "chain": "Solana",
+      "narrativeIds": ["solana", "revenue"]
+    },
+    "pendle": {
+      "symbol": "PENDLE",
+      "name": "Pendle",
+      "sectorId": "bank",
+      "chain": "Ethereum",
+      "narrativeIds": ["restake"]
+    },
+    "jito-governance-token": {
+      "symbol": "JTO",
+      "name": "Jito",
+      "sectorId": "bank",
+      "chain": "Solana",
+      "narrativeIds": ["solana", "restake"]
+    },
+    "morpho": {
+      "symbol": "MORPHO",
+      "name": "Morpho",
+      "sectorId": "bank",
+      "chain": "Ethereum",
+      "narrativeIds": ["base"]
+    },
+    "ether-fi": {
+      "symbol": "ETHFI",
+      "name": "ether.fi",
+      "sectorId": "bank",
+      "chain": "Ethereum",
+      "narrativeIds": ["restake"]
+    },
+    "syrup": {
+      "symbol": "SYRUP",
+      "name": "Maple",
+      "sectorId": "bank",
+      "chain": "Ethereum",
+      "narrativeIds": ["rwa"]
+    },
+    "eigenlayer": {
+      "symbol": "EIGEN",
+      "name": "EigenLayer",
+      "sectorId": "bank",
+      "chain": "Ethereum",
+      "narrativeIds": ["restake"]
+    },
+    "dydx-chain": {
+      "symbol": "DYDX",
+      "name": "dYdX",
+      "sectorId": "bank",
+      "chain": "Own chain",
+      "narrativeIds": ["perps"]
+    },
+    "compound-governance-token": {
+      "symbol": "COMP",
+      "name": "Compound",
+      "sectorId": "bank",
+      "chain": "Ethereum",
+      "narrativeIds": []
+    },
+    "havven": {
+      "symbol": "SNX",
+      "name": "Synthetix",
+      "sectorId": "bank",
+      "chain": "Ethereum",
+      "narrativeIds": ["perps"]
+    },
+    "gmx": {
+      "symbol": "GMX",
+      "name": "GMX",
+      "sectorId": "bank",
+      "chain": "Arbitrum",
+      "narrativeIds": ["perps", "revenue"]
+    },
+    "chainlink": {
+      "symbol": "LINK",
+      "name": "Chainlink",
+      "sectorId": "real",
+      "chain": "Ethereum",
+      "narrativeIds": ["oracles", "rwa", "etf"]
+    },
+    "ondo-finance": {
+      "symbol": "ONDO",
+      "name": "Ondo",
+      "sectorId": "real",
+      "chain": "Ethereum",
+      "narrativeIds": ["rwa"]
+    },
+    "pyth-network": {
+      "symbol": "PYTH",
+      "name": "Pyth",
+      "sectorId": "real",
+      "chain": "Solana",
+      "narrativeIds": ["oracles", "solana"]
+    },
+    "plume": {
+      "symbol": "PLUME",
+      "name": "Plume",
+      "sectorId": "real",
+      "chain": "Own chain",
+      "narrativeIds": ["rwa"]
+    },
+    "centrifuge-2": {
+      "symbol": "CFG",
+      "name": "Centrifuge",
+      "sectorId": "real",
+      "chain": "Ethereum",
+      "narrativeIds": ["rwa"]
+    },
+    "polymesh": {
+      "symbol": "POLYX",
+      "name": "Polymesh",
+      "sectorId": "real",
+      "chain": "Own chain",
+      "narrativeIds": ["rwa"]
+    },
+    "api3": {
+      "symbol": "API3",
+      "name": "API3",
+      "sectorId": "real",
+      "chain": "Ethereum",
+      "narrativeIds": ["oracles"]
+    },
+    "polkadot": {
+      "symbol": "DOT",
+      "name": "Polkadot",
+      "sectorId": "infra",
+      "chain": "Own chain",
+      "narrativeIds": ["interop", "etf"]
+    },
+    "monero": {
+      "symbol": "XMR",
+      "name": "Monero",
+      "sectorId": "infra",
+      "chain": "Own chain",
+      "narrativeIds": ["privacy"]
+    },
+    "cosmos": {
+      "symbol": "ATOM",
+      "name": "Cosmos",
+      "sectorId": "infra",
+      "chain": "Own chain",
+      "narrativeIds": ["interop"]
+    },
+    "quant-network": {
+      "symbol": "QNT",
+      "name": "Quant",
+      "sectorId": "infra",
+      "chain": "Ethereum",
+      "narrativeIds": ["interop"]
+    },
+    "zcash": {
+      "symbol": "ZEC",
+      "name": "Zcash",
+      "sectorId": "infra",
+      "chain": "Own chain",
+      "narrativeIds": ["privacy"]
+    },
+    "the-graph": {
+      "symbol": "GRT",
+      "name": "The Graph",
+      "sectorId": "infra",
+      "chain": "Ethereum",
+      "narrativeIds": ["oracles"]
+    },
+    "ethereum-name-service": {
+      "symbol": "ENS",
+      "name": "ENS",
+      "sectorId": "infra",
+      "chain": "Ethereum",
+      "narrativeIds": []
+    },
+    "layerzero": {
+      "symbol": "ZRO",
+      "name": "LayerZero",
+      "sectorId": "infra",
+      "chain": "Multi-chain",
+      "narrativeIds": ["interop"]
+    },
+    "wormhole": {
+      "symbol": "W",
+      "name": "Wormhole",
+      "sectorId": "infra",
+      "chain": "Multi-chain",
+      "narrativeIds": ["interop", "solana"]
+    },
+    "axelar": {
+      "symbol": "AXL",
+      "name": "Axelar",
+      "sectorId": "infra",
+      "chain": "Own chain",
+      "narrativeIds": ["interop"]
+    },
+    "dash": {
+      "symbol": "DASH",
+      "name": "Dash",
+      "sectorId": "infra",
+      "chain": "Own chain",
+      "narrativeIds": ["privacy"]
+    },
+    "bittensor": {
+      "symbol": "TAO",
+      "name": "Bittensor",
+      "sectorId": "ai",
+      "chain": "Own chain",
+      "narrativeIds": ["compute", "agents"]
+    },
+    "near": {
+      "symbol": "NEAR",
+      "name": "Near",
+      "sectorId": "ai",
+      "chain": "Own chain",
+      "narrativeIds": ["agents", "interop"]
+    },
+    "render-token": {
+      "symbol": "RENDER",
+      "name": "Render",
+      "sectorId": "ai",
+      "chain": "Solana",
+      "narrativeIds": ["compute", "depin", "solana"]
+    },
+    "worldcoin-wld": {
+      "symbol": "WLD",
+      "name": "Worldcoin",
+      "sectorId": "ai",
+      "chain": "Own chain",
+      "narrativeIds": []
+    },
+    "fetch-ai": {
+      "symbol": "FET",
+      "name": "ASI Alliance",
+      "sectorId": "ai",
+      "chain": "Ethereum",
+      "narrativeIds": ["agents"]
+    },
+    "virtual-protocol": {
+      "symbol": "VIRTUAL",
+      "name": "Virtuals",
+      "sectorId": "ai",
+      "chain": "Base",
+      "narrativeIds": ["agents", "base"]
+    },
+    "akash-network": {
+      "symbol": "AKT",
+      "name": "Akash",
+      "sectorId": "ai",
+      "chain": "Own chain",
+      "narrativeIds": ["compute", "depin"]
+    },
+    "kaito": {
+      "symbol": "KAITO",
+      "name": "Kaito",
+      "sectorId": "ai",
+      "chain": "Base",
+      "narrativeIds": ["agents", "base"]
+    },
+    "arkham": {
+      "symbol": "ARKM",
+      "name": "Arkham",
+      "sectorId": "ai",
+      "chain": "Ethereum",
+      "narrativeIds": []
+    },
+    "io": {
+      "symbol": "IO",
+      "name": "io.net",
+      "sectorId": "ai",
+      "chain": "Solana",
+      "narrativeIds": ["compute", "depin", "solana"]
+    },
+    "filecoin": {
+      "symbol": "FIL",
+      "name": "Filecoin",
+      "sectorId": "networks",
+      "chain": "Own chain",
+      "narrativeIds": ["depin"]
+    },
+    "theta-token": {
+      "symbol": "THETA",
+      "name": "Theta",
+      "sectorId": "networks",
+      "chain": "Own chain",
+      "narrativeIds": ["depin"]
+    },
+    "jasmycoin": {
+      "symbol": "JASMY",
+      "name": "JasmyCoin",
+      "sectorId": "networks",
+      "chain": "Ethereum",
+      "narrativeIds": ["depin"]
+    },
+    "helium": {
+      "symbol": "HNT",
+      "name": "Helium",
+      "sectorId": "networks",
+      "chain": "Solana",
+      "narrativeIds": ["depin", "solana"]
+    },
+    "arweave": {
+      "symbol": "AR",
+      "name": "Arweave",
+      "sectorId": "networks",
+      "chain": "Own chain",
+      "narrativeIds": ["depin"]
+    },
+    "iotex": {
+      "symbol": "IOTX",
+      "name": "IoTeX",
+      "sectorId": "networks",
+      "chain": "Own chain",
+      "narrativeIds": ["depin"]
+    },
+    "grass": {
+      "symbol": "GRASS",
+      "name": "Grass",
+      "sectorId": "networks",
+      "chain": "Solana",
+      "narrativeIds": ["depin", "solana", "compute"]
+    },
+    "pudgy-penguins": {
+      "symbol": "PENGU",
+      "name": "Pudgy Penguins",
+      "sectorId": "games",
+      "chain": "Solana",
+      "narrativeIds": ["solana", "memes"]
+    },
+    "immutable-x": {
+      "symbol": "IMX",
+      "name": "Immutable",
+      "sectorId": "games",
+      "chain": "Ethereum",
+      "narrativeIds": ["gaming"]
+    },
+    "gala": {
+      "symbol": "GALA",
+      "name": "Gala",
+      "sectorId": "games",
+      "chain": "Ethereum",
+      "narrativeIds": ["gaming"]
+    },
+    "the-sandbox": {
+      "symbol": "SAND",
+      "name": "The Sandbox",
+      "sectorId": "games",
+      "chain": "Ethereum",
+      "narrativeIds": ["gaming"]
+    },
+    "decentraland": {
+      "symbol": "MANA",
+      "name": "Decentraland",
+      "sectorId": "games",
+      "chain": "Ethereum",
+      "narrativeIds": ["gaming"]
+    },
+    "apecoin": {
+      "symbol": "APE",
+      "name": "ApeCoin",
+      "sectorId": "games",
+      "chain": "Ethereum",
+      "narrativeIds": []
+    },
+    "axie-infinity": {
+      "symbol": "AXS",
+      "name": "Axie Infinity",
+      "sectorId": "games",
+      "chain": "Ronin",
+      "narrativeIds": ["gaming"]
+    },
+    "ronin": {
+      "symbol": "RON",
+      "name": "Ronin",
+      "sectorId": "games",
+      "chain": "Own chain",
+      "narrativeIds": ["gaming"]
+    },
+    "beam-2": {
+      "symbol": "BEAM",
+      "name": "Beam",
+      "sectorId": "games",
+      "chain": "Own chain",
+      "narrativeIds": ["gaming"]
+    },
+    "dogecoin": {
+      "symbol": "DOGE",
+      "name": "Dogecoin",
+      "sectorId": "culture",
+      "chain": "Own chain",
+      "narrativeIds": ["memes", "etf"]
+    },
+    "shiba-inu": {
+      "symbol": "SHIB",
+      "name": "Shiba Inu",
+      "sectorId": "culture",
+      "chain": "Ethereum",
+      "narrativeIds": ["memes"]
+    },
+    "pepe": {
+      "symbol": "PEPE",
+      "name": "Pepe",
+      "sectorId": "culture",
+      "chain": "Ethereum",
+      "narrativeIds": ["memes"]
+    },
+    "bonk": {
+      "symbol": "BONK",
+      "name": "Bonk",
+      "sectorId": "culture",
+      "chain": "Solana",
+      "narrativeIds": ["memes", "solana"]
+    },
+    "spx6900": {
+      "symbol": "SPX",
+      "name": "SPX6900",
+      "sectorId": "culture",
+      "chain": "Ethereum",
+      "narrativeIds": ["memes"]
+    },
+    "dogwifcoin": {
+      "symbol": "WIF",
+      "name": "dogwifhat",
+      "sectorId": "culture",
+      "chain": "Solana",
+      "narrativeIds": ["memes", "solana"]
+    },
+    "floki": {
+      "symbol": "FLOKI",
+      "name": "Floki",
+      "sectorId": "culture",
+      "chain": "Ethereum",
+      "narrativeIds": ["memes"]
+    },
+    "based-brett": {
+      "symbol": "BRETT",
+      "name": "Brett",
+      "sectorId": "culture",
+      "chain": "Base",
+      "narrativeIds": ["memes", "base"]
+    },
+    "popcat": {
+      "symbol": "POPCAT",
+      "name": "Popcat",
+      "sectorId": "culture",
+      "chain": "Solana",
+      "narrativeIds": ["memes", "solana"]
+    }
+  },
+  "coins": {
+    "solana": {
+      "defillamaSlug": null,
+      "note": "DefiLlama 'solana-farm' is an unrelated small DEX; the chain mapping (Solana) is the right one."
+    },
+    "crypto-com-chain": {
+      "defillamaSlug": null,
+      "note": "DefiLlama 'defi-swap' is a DEX that carries this gecko_id; the chain mapping (Cronos) is the right one."
+    },
+    "injective-protocol": {
+      "defillamaSlug": null,
+      "note": "The matched parent 'Injective Orderbook' is one app on the chain; the chain mapping (Injective) is the right one."
+    },
+    "floki": {
+      "defillamaSlug": null,
+      "note": "DefiLlama 'flokifi-locker' is a token locker, not the Floki project."
+    }
+  }
+}

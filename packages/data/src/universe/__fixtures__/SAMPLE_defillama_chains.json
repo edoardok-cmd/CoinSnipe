@@ -1,0 +1,74 @@
+[
+  {
+    "gecko_id": "ethereum",
+    "gasTokenGeckoId": "ethereum",
+    "tvl": 9000,
+    "tokenSymbol": "ETH",
+    "cmcId": "1",
+    "name": "Ethereum",
+    "chainId": 1
+  },
+  {
+    "gecko_id": "solana",
+    "gasTokenGeckoId": "solana",
+    "tvl": 4000,
+    "tokenSymbol": "SOL",
+    "cmcId": "2",
+    "name": "Solana",
+    "chainId": null
+  },
+  {
+    "gecko_id": "avalanche-2",
+    "gasTokenGeckoId": "avalanche-2",
+    "tvl": 2000,
+    "tokenSymbol": "AVAX",
+    "cmcId": "3",
+    "name": "Avalanche",
+    "chainId": 43114
+  },
+  {
+    "gecko_id": "binancecoin",
+    "gasTokenGeckoId": "binancecoin",
+    "tvl": 3000,
+    "tokenSymbol": "BNB",
+    "cmcId": "4",
+    "name": "BSC",
+    "chainId": 56
+  },
+  {
+    "gecko_id": "binancecoin",
+    "gasTokenGeckoId": "binancecoin",
+    "tvl": 100,
+    "tokenSymbol": "BNB",
+    "cmcId": "4",
+    "name": "opBNB",
+    "chainId": 204
+  },
+  {
+    "gecko_id": "hyperliquid",
+    "gasTokenGeckoId": "hyperliquid",
+    "tvl": 900,
+    "tokenSymbol": "HYPE",
+    "cmcId": "5",
+    "name": "Hyperliquid L1",
+    "chainId": null
+  },
+  {
+    "gecko_id": null,
+    "gasTokenGeckoId": null,
+    "tvl": 20,
+    "tokenSymbol": "SFC",
+    "cmcId": null,
+    "name": "Sample Fuzzy",
+    "chainId": null
+  },
+  {
+    "gecko_id": "sample-chain-token",
+    "gasTokenGeckoId": "sample-chain-token",
+    "tvl": 30,
+    "tokenSymbol": "SCHN",
+    "cmcId": null,
+    "name": "Sample Chain Token Net",
+    "chainId": null
+  }
+]

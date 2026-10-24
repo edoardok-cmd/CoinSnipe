@@ -86,6 +86,13 @@ importers:
         version: 5.0.5(@types/node@22.20.5)(vite@8.3.5(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   apps/worker:
+    dependencies:
+      '@coinsnipe/data':
+        specifier: workspace:*
+        version: link:../../packages/data
+      '@coinsnipe/db':
+        specifier: workspace:*
+        version: link:../../packages/db
     devDependencies:
       '@types/node':
         specifier: ^22.20.5

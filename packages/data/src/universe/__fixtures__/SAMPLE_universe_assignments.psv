@@ -1,0 +1,115 @@
+symbol|name|sector_id|chain|narrative_ids
+BTC|Bitcoin|gold|Own chain|etf,btcfi
+LTC|Litecoin|gold|Own chain|etf
+BCH|Bitcoin Cash|gold|Own chain|
+ETC|Ethereum Classic|gold|Own chain|
+KAS|Kaspa|gold|Own chain|
+PAXG|PAX Gold|gold|Ethereum|rwa
+XAUT|Tether Gold|gold|Ethereum|rwa
+ETH|Ethereum|platforms|Own chain|etf,restake
+SOL|Solana|platforms|Own chain|etf,solana
+BNB|BNB|platforms|Own chain|cex,revenue
+ADA|Cardano|platforms|Own chain|etf
+AVAX|Avalanche|platforms|Own chain|etf,rwa
+SUI|Sui|platforms|Own chain|fastl1
+TON|Toncoin|platforms|Own chain|
+CRO|Cronos|platforms|Own chain|cex
+OKB|OKB|platforms|Own chain|cex
+APT|Aptos|platforms|Own chain|fastl1,rwa
+ICP|Internet Computer|platforms|Own chain|agents
+SEI|Sei|platforms|Own chain|fastl1
+INJ|Injective|platforms|Own chain|perps,rwa
+S|Sonic|platforms|Own chain|fastl1
+XTZ|Tezos|platforms|Own chain|
+EGLD|MultiversX|platforms|Own chain|
+FLOW|Flow|platforms|Own chain|gaming
+BERA|Berachain|platforms|Own chain|
+ARB|Arbitrum|scaling|Ethereum|modular
+POL|Polygon|scaling|Ethereum|modular,stable
+MNT|Mantle|scaling|Ethereum|modular,cex
+OP|Optimism|scaling|Ethereum|modular,base
+TIA|Celestia|scaling|Own chain|modular
+STX|Stacks|scaling|Bitcoin|btcfi
+STRK|Starknet|scaling|Ethereum|modular,btcfi
+ZK|ZKsync|scaling|Ethereum|modular
+XRP|XRP|payments|Own chain|etf,stable
+TRX|Tron|payments|Own chain|stable
+XLM|Stellar|payments|Own chain|stable,rwa
+HBAR|Hedera|payments|Own chain|etf,rwa
+ALGO|Algorand|payments|Own chain|rwa
+XDC|XDC Network|payments|Own chain|rwa
+CELO|Celo|payments|Ethereum|stable
+HYPE|Hyperliquid|bank|Own chain|perps,revenue
+UNI|Uniswap|bank|Ethereum|revenue,base
+AAVE|Aave|bank|Ethereum|revenue
+ENA|Ethena|bank|Ethereum|stable
+JUP|Jupiter|bank|Solana|solana,perps
+SKY|Sky|bank|Ethereum|stable,rwa
+LDO|Lido|bank|Ethereum|restake
+CRV|Curve|bank|Ethereum|stable
+CAKE|PancakeSwap|bank|BNB Chain|revenue
+AERO|Aerodrome|bank|Base|base,revenue
+RAY|Raydium|bank|Solana|solana,revenue
+PENDLE|Pendle|bank|Ethereum|restake
+JTO|Jito|bank|Solana|solana,restake
+MORPHO|Morpho|bank|Ethereum|base
+ETHFI|ether.fi|bank|Ethereum|restake
+SYRUP|Maple|bank|Ethereum|rwa
+EIGEN|EigenLayer|bank|Ethereum|restake
+DYDX|dYdX|bank|Own chain|perps
+COMP|Compound|bank|Ethereum|
+SNX|Synthetix|bank|Ethereum|perps
+GMX|GMX|bank|Arbitrum|perps,revenue
+LINK|Chainlink|real|Ethereum|oracles,rwa,etf
+ONDO|Ondo|real|Ethereum|rwa
+PYTH|Pyth|real|Solana|oracles,solana
+PLUME|Plume|real|Own chain|rwa
+CFG|Centrifuge|real|Ethereum|rwa
+POLYX|Polymesh|real|Own chain|rwa
+API3|API3|real|Ethereum|oracles
+DOT|Polkadot|infra|Own chain|interop,etf
+XMR|Monero|infra|Own chain|privacy
+ATOM|Cosmos|infra|Own chain|interop
+QNT|Quant|infra|Ethereum|interop
+ZEC|Zcash|infra|Own chain|privacy
+GRT|The Graph|infra|Ethereum|oracles
+ENS|ENS|infra|Ethereum|
+ZRO|LayerZero|infra|Multi-chain|interop
+W|Wormhole|infra|Multi-chain|interop,solana
+AXL|Axelar|infra|Own chain|interop
+DASH|Dash|infra|Own chain|privacy
+TAO|Bittensor|ai|Own chain|compute,agents
+NEAR|Near|ai|Own chain|agents,interop
+RENDER|Render|ai|Solana|compute,depin,solana
+WLD|Worldcoin|ai|Own chain|
+FET|ASI Alliance|ai|Ethereum|agents
+VIRTUAL|Virtuals|ai|Base|agents,base
+AKT|Akash|ai|Own chain|compute,depin
+KAITO|Kaito|ai|Base|agents,base
+ARKM|Arkham|ai|Ethereum|
+IO|io.net|ai|Solana|compute,depin,solana
+FIL|Filecoin|networks|Own chain|depin
+THETA|Theta|networks|Own chain|depin
+JASMY|JasmyCoin|networks|Ethereum|depin
+HNT|Helium|networks|Solana|depin,solana
+AR|Arweave|networks|Own chain|depin
+IOTX|IoTeX|networks|Own chain|depin
+GRASS|Grass|networks|Solana|depin,solana,compute
+PENGU|Pudgy Penguins|games|Solana|solana,memes
+IMX|Immutable|games|Ethereum|gaming
+GALA|Gala|games|Ethereum|gaming
+SAND|The Sandbox|games|Ethereum|gaming
+MANA|Decentraland|games|Ethereum|gaming
+APE|ApeCoin|games|Ethereum|
+AXS|Axie Infinity|games|Ronin|gaming
+RON|Ronin|games|Own chain|gaming
+BEAM|Beam|games|Own chain|gaming
+DOGE|Dogecoin|culture|Own chain|memes,etf
+SHIB|Shiba Inu|culture|Ethereum|memes
+PEPE|Pepe|culture|Ethereum|memes
+BONK|Bonk|culture|Solana|memes,solana
+SPX|SPX6900|culture|Ethereum|memes
+WIF|dogwifhat|culture|Solana|memes,solana
+FLOKI|Floki|culture|Ethereum|memes
+BRETT|Brett|culture|Base|memes,base
+POPCAT|Popcat|culture|Solana|memes,solana

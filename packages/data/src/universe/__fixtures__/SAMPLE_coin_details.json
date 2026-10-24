@@ -1,0 +1,2255 @@
+[
+  {
+    "id": "bitcoin",
+    "symbol": "btc",
+    "name": "Bitcoin",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Layer 1 (L1)", "Proof of Work (PoW)", "Bitcoin Ecosystem"],
+    "genesis_date": "2009-01-03",
+    "links": {
+      "repos_url": {
+        "github": [
+          "https://github.com/bitcoin/bitcoin",
+          "https://github.com/bitcoin/bips",
+          "",
+          "https://github.com/bitcoin"
+        ],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "litecoin",
+    "symbol": "ltc",
+    "name": "Litecoin",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "bitcoin-cash",
+    "symbol": "bch",
+    "name": "Bitcoin Cash",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "ethereum-classic",
+    "symbol": "etc",
+    "name": "Ethereum Classic",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "kaspa",
+    "symbol": "kas",
+    "name": "Kaspa",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "pax-gold",
+    "symbol": "paxg",
+    "name": "PAX Gold",
+    "asset_platform_id": "ethereum",
+    "platforms": {
+      "ethereum": "0x0000000000000000000000000000000000000001"
+    },
+    "categories": ["Tokenized Gold", "Commodity-backed Stablecoin", "Real World Assets (RWA)"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "tether-gold",
+    "symbol": "xaut",
+    "name": "Tether Gold",
+    "asset_platform_id": "ethereum",
+    "platforms": {
+      "ethereum": "0x0000000000000000000000000000000000000002"
+    },
+    "categories": ["Tokenized Gold", "Commodity-backed Stablecoin"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "ethereum",
+    "symbol": "eth",
+    "name": "Ethereum",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Smart Contract Platform", "Layer 1 (L1)", "Ethereum Ecosystem"],
+    "genesis_date": "2015-07-30",
+    "links": {
+      "repos_url": {
+        "github": [
+          "https://github.com/ethereum/go-ethereum",
+          "https://github.com/ethereum/solidity/",
+          "https://github.com/ethereum"
+        ],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "solana",
+    "symbol": "sol",
+    "name": "Solana",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Smart Contract Platform", "Layer 1 (L1)", "Solana Ecosystem"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": ["https://github.com/solana-labs/solana"],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "binancecoin",
+    "symbol": "bnb",
+    "name": "BNB",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "cardano",
+    "symbol": "ada",
+    "name": "Cardano",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "avalanche-2",
+    "symbol": "avax",
+    "name": "Avalanche",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "sui",
+    "symbol": "sui",
+    "name": "Sui",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "the-open-network",
+    "symbol": "gram",
+    "name": "Gram (prev. Toncoin)",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "crypto-com-chain",
+    "symbol": "cro",
+    "name": "Cronos",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "okb",
+    "symbol": "okb",
+    "name": "OKB",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Exchange-based Tokens"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "aptos",
+    "symbol": "apt",
+    "name": "Aptos",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "internet-computer",
+    "symbol": "icp",
+    "name": "Internet Computer",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "sei-network",
+    "symbol": "sei",
+    "name": "Sei",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "injective-protocol",
+    "symbol": "inj",
+    "name": "Injective",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "sonic-3",
+    "symbol": "s",
+    "name": "Sonic",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "tezos",
+    "symbol": "xtz",
+    "name": "Tezos",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "elrond-erd-2",
+    "symbol": "egld",
+    "name": "MultiversX",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "flow",
+    "symbol": "flow",
+    "name": "Flow",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "berachain-bera",
+    "symbol": "bera",
+    "name": "Berachain",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "arbitrum",
+    "symbol": "arb",
+    "name": "Arbitrum",
+    "asset_platform_id": "ethereum",
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Layer 2 (L2)", "Rollup"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "polygon-ecosystem-token",
+    "symbol": "pol",
+    "name": "POL (ex-MATIC)",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "mantle",
+    "symbol": "mnt",
+    "name": "Mantle",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "optimism",
+    "symbol": "op",
+    "name": "Optimism",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "celestia",
+    "symbol": "tia",
+    "name": "Celestia",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "blockstack",
+    "symbol": "stx",
+    "name": "Stacks",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "starknet",
+    "symbol": "strk",
+    "name": "Starknet",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "zksync",
+    "symbol": "zk",
+    "name": "ZKsync",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "ripple",
+    "symbol": "xrp",
+    "name": "XRP",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "tron",
+    "symbol": "trx",
+    "name": "TRON",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "stellar",
+    "symbol": "xlm",
+    "name": "Stellar",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "hedera-hashgraph",
+    "symbol": "hbar",
+    "name": "Hedera",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "algorand",
+    "symbol": "algo",
+    "name": "Algorand",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "xdce-crowd-sale",
+    "symbol": "xdc",
+    "name": "XDC Network",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "celo",
+    "symbol": "celo",
+    "name": "Celo",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "hyperliquid",
+    "symbol": "hype",
+    "name": "Hyperliquid",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "uniswap",
+    "symbol": "uni",
+    "name": "Uniswap",
+    "asset_platform_id": "ethereum",
+    "platforms": {
+      "ethereum": "0x0000000000000000000000000000000000000003"
+    },
+    "categories": ["Decentralized Exchange (DEX)", "Decentralized Finance (DeFi)"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "aave",
+    "symbol": "aave",
+    "name": "Aave",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Lending/Borrowing Protocols", "Decentralized Finance (DeFi)"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "ethena",
+    "symbol": "ena",
+    "name": "Ethena",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Stablecoin Issuer", "Yield-Bearing Stablecoin"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "jupiter-exchange-solana",
+    "symbol": "jup",
+    "name": "Jupiter",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "sky",
+    "symbol": "sky",
+    "name": "Sky",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Stablecoin Issuer", "Decentralized Finance (DeFi)"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "lido-dao",
+    "symbol": "ldo",
+    "name": "Lido DAO",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Liquid Staking Governance Tokens", "Decentralized Finance (DeFi)"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "curve-dao-token",
+    "symbol": "crv",
+    "name": "Curve DAO",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "pancakeswap-token",
+    "symbol": "cake",
+    "name": "PancakeSwap",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "aerodrome-finance",
+    "symbol": "aero",
+    "name": "Aerodrome Finance",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "raydium",
+    "symbol": "ray",
+    "name": "Raydium",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "pendle",
+    "symbol": "pendle",
+    "name": "Pendle",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "jito-governance-token",
+    "symbol": "jto",
+    "name": "Jito",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "morpho",
+    "symbol": "morpho",
+    "name": "Morpho",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "ether-fi",
+    "symbol": "ethfi",
+    "name": "Ether.fi",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "syrup",
+    "symbol": "syrup",
+    "name": "Maple Finance",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "eigenlayer",
+    "symbol": "eigen",
+    "name": "EigenCloud (prev. EigenLayer)",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "dydx-chain",
+    "symbol": "dydx",
+    "name": "dYdX",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "compound-governance-token",
+    "symbol": "comp",
+    "name": "Compound",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "havven",
+    "symbol": "snx",
+    "name": "Synthetix",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "gmx",
+    "symbol": "gmx",
+    "name": "GMX",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "chainlink",
+    "symbol": "link",
+    "name": "Chainlink",
+    "asset_platform_id": "ethereum",
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Oracle"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "ondo-finance",
+    "symbol": "ondo",
+    "name": "Ondo",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "pyth-network",
+    "symbol": "pyth",
+    "name": "Pyth Network",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "plume",
+    "symbol": "plume",
+    "name": "Plume",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "centrifuge-2",
+    "symbol": "cfg",
+    "name": "Centrifuge",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "polymesh",
+    "symbol": "polyx",
+    "name": "Polymesh",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "api3",
+    "symbol": "api3",
+    "name": "Api3",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "polkadot",
+    "symbol": "dot",
+    "name": "Polkadot",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "monero",
+    "symbol": "xmr",
+    "name": "Monero",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "cosmos",
+    "symbol": "atom",
+    "name": "Cosmos Hub",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "quant-network",
+    "symbol": "qnt",
+    "name": "Quant",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "zcash",
+    "symbol": "zec",
+    "name": "Zcash",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "the-graph",
+    "symbol": "grt",
+    "name": "The Graph",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "ethereum-name-service",
+    "symbol": "ens",
+    "name": "Ethereum Name Service",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "layerzero",
+    "symbol": "zro",
+    "name": "LayerZero",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "wormhole",
+    "symbol": "w",
+    "name": "Wormhole",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "axelar",
+    "symbol": "axl",
+    "name": "Axelar",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "dash",
+    "symbol": "dash",
+    "name": "Dash",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "bittensor",
+    "symbol": "tao",
+    "name": "Bittensor",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "near",
+    "symbol": "near",
+    "name": "NEAR Protocol",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "render-token",
+    "symbol": "render",
+    "name": "Render",
+    "asset_platform_id": "solana",
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Artificial Intelligence (AI)", "DePIN", "Solana Ecosystem"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "worldcoin-wld",
+    "symbol": "wld",
+    "name": "Worldcoin",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "fetch-ai",
+    "symbol": "fet",
+    "name": "Artificial Superintelligence Alliance",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "virtual-protocol",
+    "symbol": "virtual",
+    "name": "Virtuals Protocol",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "akash-network",
+    "symbol": "akt",
+    "name": "Akash Network",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "kaito",
+    "symbol": "kaito",
+    "name": "KAITO",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "arkham",
+    "symbol": "arkm",
+    "name": "Arkham",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "io",
+    "symbol": "io",
+    "name": "io.net",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "filecoin",
+    "symbol": "fil",
+    "name": "Filecoin",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "theta-token",
+    "symbol": "theta",
+    "name": "Theta Network",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "jasmycoin",
+    "symbol": "jasmy",
+    "name": "JasmyCoin",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "helium",
+    "symbol": "hnt",
+    "name": "Helium",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "arweave",
+    "symbol": "ar",
+    "name": "Arweave",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "iotex",
+    "symbol": "iotx",
+    "name": "IoTeX",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "grass",
+    "symbol": "grass",
+    "name": "Grass",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "pudgy-penguins",
+    "symbol": "pengu",
+    "name": "Pudgy Penguins",
+    "asset_platform_id": "solana",
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Meme", "Solana Meme", "Non-Fungible Tokens (NFT)"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "immutable-x",
+    "symbol": "imx",
+    "name": "Immutable",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "gala",
+    "symbol": "gala",
+    "name": "GALA",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "the-sandbox",
+    "symbol": "sand",
+    "name": "The Sandbox",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "decentraland",
+    "symbol": "mana",
+    "name": "Decentraland",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "apecoin",
+    "symbol": "ape",
+    "name": "ApeCoin",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "axie-infinity",
+    "symbol": "axs",
+    "name": "Axie Infinity",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "ronin",
+    "symbol": "ron",
+    "name": "Ronin",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "beam-2",
+    "symbol": "beam",
+    "name": "Beam",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "dogecoin",
+    "symbol": "doge",
+    "name": "Dogecoin",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Meme", "Dog-Themed"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "shiba-inu",
+    "symbol": "shib",
+    "name": "Shiba Inu",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "pepe",
+    "symbol": "pepe",
+    "name": "Pepe",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "bonk",
+    "symbol": "bonk",
+    "name": "Bonk",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "spx6900",
+    "symbol": "spx",
+    "name": "SPX6900",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "dogwifcoin",
+    "symbol": "wif",
+    "name": "dogwifhat",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "floki",
+    "symbol": "floki",
+    "name": "FLOKI",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "based-brett",
+    "symbol": "brett",
+    "name": "Brett",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "popcat",
+    "symbol": "popcat",
+    "name": "Popcat",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "tether",
+    "symbol": "usdt",
+    "name": "Tether",
+    "asset_platform_id": "ethereum",
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Stablecoins", "USD Stablecoin"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "usd-coin",
+    "symbol": "usdc",
+    "name": "USDC",
+    "asset_platform_id": "ethereum",
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Stablecoins", "USD Stablecoin"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "wrapped-bitcoin",
+    "symbol": "wbtc",
+    "name": "Wrapped Bitcoin",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Wrapped-Tokens", "Bitcoin Ecosystem"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "staked-ether",
+    "symbol": "steth",
+    "name": "Liquid Staked Ether",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Liquid Staked ETH", "Liquid Staking Tokens"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "binance-peg-ethereum",
+    "symbol": "eth",
+    "name": "Binance-Peg Ethereum",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Binance-Peg Tokens"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "sample-iou-token",
+    "symbol": "siou",
+    "name": "Sample IOU Token",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Ethereum PoS IOU"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "sample-bridged-token",
+    "symbol": "sbrg",
+    "name": "Sample Bridged Token",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Bridged-Tokens"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "sample-thin-coin",
+    "symbol": "sthin",
+    "name": "Sample Thin Coin",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Smart Contract Platform"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "sample-no-cap",
+    "symbol": "snocap",
+    "name": "Sample No Cap",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Smart Contract Platform"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "sample-dex-token",
+    "symbol": "sdex",
+    "name": "Sample Dex Token",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Decentralized Exchange (DEX)"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "sample-l2-token",
+    "symbol": "sl2",
+    "name": "Sample L2 Token",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Layer 2 (L2)"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "sample-meme-token",
+    "symbol": "smeme",
+    "name": "Sample Meme Token",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Meme", "Cat-Themed"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "sample-unclassified",
+    "symbol": "sunc",
+    "name": "Sample Unclassified",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "sample-fuzzy-protocol",
+    "symbol": "sfz",
+    "name": "Sample Fuzz",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "sample-chain-token",
+    "symbol": "schn",
+    "name": "Sample Chain Token",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "sample-gold-token",
+    "symbol": "sgld",
+    "name": "Sample Gold Token",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Tokenized Gold"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "sample-fuzzy-chain",
+    "symbol": "sfc",
+    "name": "Sample Fuzzy Chain",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": [],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  },
+  {
+    "id": "sample-fallback-volume",
+    "symbol": "sfbv",
+    "name": "Sample Fallback Volume",
+    "asset_platform_id": null,
+    "platforms": {
+      "": ""
+    },
+    "categories": ["Smart Contract Platform"],
+    "genesis_date": null,
+    "links": {
+      "repos_url": {
+        "github": [],
+        "bitbucket": []
+      }
+    }
+  }
+]
