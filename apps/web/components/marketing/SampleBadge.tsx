@@ -34,8 +34,8 @@ export function assertSampleContentLabelled(
 export function SampleBadge() {
   if (!shouldShowSampleBadge()) return null;
   return (
-    <div className="sample-badge" role="note">
+    <aside className="sample-badge" aria-label="Sample data notice">
       Sample data
-    </div>
+    </aside>
   );
 }

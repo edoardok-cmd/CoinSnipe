@@ -25,6 +25,7 @@ describe('marketing content: compliance', () => {
     expect(Object.keys(content.marketingSections)).toEqual([
       'siteMeta',
       'nav',
+      'stickyCta',
       'hero',
       'coinTabs',
       'signalFlow',

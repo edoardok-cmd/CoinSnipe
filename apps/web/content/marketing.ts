@@ -82,6 +82,19 @@ export const nav = {
   cta: { label: 'Start for free', href: '#quiz' },
 } as const;
 
+/* ------------------------------------------------------------------ sticky pill (mobile) */
+
+/**
+ * Sticky "Start for free" pill of the mobile layout (flow map, "Mobile web"). Same label and
+ * target as the nav button, so it reuses them: one place to edit the call to action.
+ */
+export const stickyCta = {
+  label: nav.cta.label,
+  href: nav.cta.href,
+  /** Accessible name of the landmark that holds the pill. */
+  landmarkLabel: 'Get started',
+} as const;
+
 /* ------------------------------------------------------------------ hero */
 
 export const hero = {
@@ -842,6 +855,7 @@ export const COIN_LOGOS: Record<CoinSymbol, string> = {
 export const marketingSections = {
   siteMeta,
   nav,
+  stickyCta,
   hero,
   coinTabs,
   signalFlow,
