@@ -41,6 +41,26 @@ pnpm format:check     # Prettier, check only
 `.env.local` and fill it in locally; never commit real values. End-to-end tests (Playwright) will
 live in `apps/web/e2e`; the CI job for them is a commented stub.
 
+## Git hooks / private docs guard
+
+This repo is public. Some planning docs are private and must never be pushed here. A `pre-push`
+hook (`scripts/git-hooks/pre-push`) refuses any push whose history contains a file named
+`decisions.md` or `data-licensing.md`, in any folder.
+
+- `pnpm install` turns the guard on for your clone (it runs `scripts/install-git-hooks.sh`). It
+  copies the hook into the clone's shared git folder, so all worktrees use it, whichever branch
+  is checked out.
+- Check it is on: `bash scripts/install-git-hooks.sh --check` (exit 0 means active and current).
+- If a push is refused: the message lists the files. Rewrite the branch to drop them, then push again.
+  Do not bypass the hook.
+- **No protection without the installer.** A clone that skipped `pnpm install` (or used
+  `--ignore-scripts`) has no guard. Run `bash scripts/install-git-hooks.sh` before any push.
+- **Re-run after changes.** The guard is a copy. After the hook file changes (pull, merge), or
+  after you move or rename the clone folder, run `pnpm install` or the installer again. Until
+  then git can silently skip the guard. `--check` tells you.
+- If your git folder is read-only the installer warns and does not install; fix that and re-run.
+- Tests: `pnpm test:hooks`.
+
 ## Project context
 
 - Project hub (private planning pages): https://coinsnipe-hub-repo.vercel.app

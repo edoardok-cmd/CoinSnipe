@@ -4,16 +4,23 @@
 # reachable from the refs being pushed that the remote does not already have, so an old task
 # branch carrying the docs in an ancestor commit is refused too, not just the tip tree.
 # $1 is the remote name git passes in; only objects THAT remote lacks are scanned.
-# Install (shared by all worktrees): cp scripts/git-hooks/pre-push "$(git rev-parse --git-common-dir)/hooks/pre-push"
+# The two docs are matched by file NAME at any depth (decisions.md, data-licensing.md), so a
+# moved or renamed-directory copy is refused too. Matching is case-insensitive.
+#
+# Install: `pnpm install` runs scripts/install-git-hooks.sh, which COPIES this file into the
+# clone's git common dir (coinsnipe-hooks/) and points core.hooksPath there. The copy only
+# refreshes when the installer re-runs, so re-run it after this file changes or the clone moves.
+# Verify:  bash scripts/install-git-hooks.sh --check   (reports a missing, moved or stale copy)
 zero=0000000000000000000000000000000000000000
 bad=0
 while read -r local_ref local_sha remote_ref remote_sha; do
   [ "$local_sha" = "$zero" ] && continue
   hits=$(git rev-list --objects "$local_sha" --not --remotes="$1" 2>/dev/null \
-    | grep -E ' (docs/decisions\.md|docs/data-licensing\.md)$' || true)
+    | sed -n 's/^[0-9a-f]\{40,64\} //p' \
+    | grep -Ei '(^|/)(decisions|data-licensing)\.md$' || true)
   if [ -n "$hits" ]; then
     echo "pre-push: refusing $local_ref -> $remote_ref: history contains private cost docs:" >&2
-    echo "$hits" | sed 's/^[0-9a-f]* /  /' | sort -u >&2
+    echo "$hits" | sort -u | sed 's/^/  /' >&2
     bad=1
   fi
 done
