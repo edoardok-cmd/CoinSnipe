@@ -1,12 +1,17 @@
 /**
- * Tests for the weekly universe job (CSN-020). No network, no database: fetch, clock and store
- * are injected. All market numbers below are invented (SAMPLE data).
+ * Tests for the weekly universe job (CSN-020). The job tests inject fetch, clock and store, so
+ * they need no network and no database; the Prisma store adapter is checked twice, against a
+ * recording fake client and (when DATABASE_URL points at a local Postgres) against the real
+ * migrated schema. All market numbers below are invented (SAMPLE data).
  */
+import { randomBytes } from 'node:crypto';
+import { readdirSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import type { UniverseAsset } from '@coinsnipe/data';
-import type { PrismaClient } from '@coinsnipe/db';
-import { describe, expect, it } from 'vitest';
+import { NARRATIVES, PrismaClient, SECTORS } from '@coinsnipe/db';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { UNIVERSE_JOB, createPrismaUniverseStore, runUniverseJob } from './universe';
-import type { UniverseJobDeps, UniverseStore } from './universe';
+import type { JobRunDetails, UniverseJobDeps, UniverseStore } from './universe';
 
 // ---------------------------------------------------------------------------
 // SAMPLE responses, shaped like the real APIs
@@ -74,29 +79,29 @@ interface Harness {
 
 class MemoryStore implements UniverseStore {
   assets = new Map<string, UniverseAsset>();
-  runs = new Map<string, { status: string; rows: number; error: string | null }>();
+  runs = new Map<
+    string,
+    { status: string; rows: number; error: string | null; details: JobRunDetails }
+  >();
   upsertCalls: string[][] = [];
   inactiveCalls: Array<Array<{ id: string; delistedAt: Date }>> = [];
 
   async loadAssets() {
     return [...this.assets.values()];
   }
-  async getRun(job: string, runDate: string) {
-    const run = this.runs.get(`${job}:${runDate}`);
+  async getRun(job: string, runKey: string) {
+    const run = this.runs.get(`${job}:${runKey}`);
     return run ? { status: run.status } : null;
   }
-  async startRun(job: string, runDate: string) {
-    this.runs.set(`${job}:${runDate}`, { status: 'running', rows: 0, error: null });
+  async startRun(job: string, runKey: string) {
+    this.runs.set(`${job}:${runKey}`, { status: 'running', rows: 0, error: null, details: {} });
   }
-  async finishRun(
-    job: string,
-    runDate: string,
-    outcome: { status: 'ok' | 'failed'; rows: number; error: string | null },
-  ) {
-    this.runs.set(`${job}:${runDate}`, {
+  async finishRun(job: string, runKey: string, outcome: Parameters<UniverseStore['finishRun']>[2]) {
+    this.runs.set(`${job}:${runKey}`, {
       status: outcome.status,
       rows: outcome.rows,
       error: outcome.error,
+      details: outcome.details,
     });
   }
   async upsertAssets(assets: readonly UniverseAsset[]) {
@@ -198,6 +203,22 @@ function harness(startIso = '2026-01-05T03:00:00.000Z'): Harness {
   };
 }
 
+/** The structured diff the job stores in job_runs.details for a slot. */
+interface StoredDiff {
+  event: string;
+  runKey: string;
+  assets: number;
+  rowsWritten: number;
+  added: Array<{ id: string; symbol: string; sector: string }>;
+  removed: Array<{ id: string; symbol: string; reason: string }>;
+  delisted: Array<{ id: string; symbol: string | null; reason: string | null; delistedAt: string }>;
+  remapped: Array<{ id: string; changes: Array<{ field: string; from: unknown; to: unknown }> }>;
+  reactivated: Array<{ id: string; symbol: string }>;
+  stablecoins: Array<{ coingeckoId: string; symbol: string; name: string }>;
+}
+const storedDetails = (h: Harness, runKey: string) =>
+  h.store.runs.get(`${UNIVERSE_JOB}:${runKey}`)?.details as unknown as StoredDiff;
+
 const diffLine = (logs: string[]) =>
   JSON.parse([...logs].reverse().find((l) => l.includes('"event":"universe-diff"')) ?? '{}') as {
     added: Array<{ id: string }>;
@@ -216,8 +237,9 @@ describe('universe job', () => {
     const h = harness();
     const result = await runUniverseJob(h.deps);
 
-    expect(result.status).toBe('ok');
+    expect(result.status).toBe('success');
     expect(result.runDate).toBe('2026-01-05');
+    expect(result.runKey).toBe('2026-01-05');
     expect([...h.store.assets.keys()].sort()).toEqual(['bitcoin', 'dogecoin', 'ethereum']);
     expect(h.store.assets.get('bitcoin')).toMatchObject({
       coingeckoId: 'bitcoin',
@@ -230,13 +252,56 @@ describe('universe job', () => {
     expect(h.store.assets.get('ethereum')?.defillamaChain).toBe('Ethereum');
     expect(h.store.assets.get('dogecoin')).toMatchObject({ sectorId: 'culture', isMeme: true });
 
-    expect(h.store.runs.get(`${UNIVERSE_JOB}:2026-01-05`)).toEqual({
-      status: 'ok',
+    expect(h.store.runs.get(`${UNIVERSE_JOB}:2026-01-05`)).toMatchObject({
+      status: 'success',
       rows: 3,
       error: null,
     });
     expect(result.rows).toBe(3);
     expect(result.counts).toMatchObject({ added: 3, removed: 0, remapped: 0, stablecoins: 1 });
+  });
+
+  it('stores the diff and the stablecoin list in the run details', async () => {
+    const h = harness();
+    await runUniverseJob(h.deps);
+    const details = storedDetails(h, '2026-01-05');
+    expect(details).toMatchObject({ event: 'universe-diff', runKey: '2026-01-05', rowsWritten: 3 });
+    expect(details.added.map((a) => a.id).sort()).toEqual(['bitcoin', 'dogecoin', 'ethereum']);
+    expect(details.added.find((a) => a.id === 'bitcoin')).toEqual({
+      id: 'bitcoin',
+      symbol: 'BTC',
+      sector: 'gold',
+    });
+    expect(details.removed).toEqual([]);
+    expect(details.delisted).toEqual([]);
+    expect(details.remapped).toEqual([]);
+    expect(details.stablecoins).toEqual([
+      expect.objectContaining({ coingeckoId: 'tether', symbol: 'USDT', name: 'Tether' }),
+    ]);
+    // The row holds plain JSON: it survives a serialise / parse round trip unchanged.
+    expect(JSON.parse(JSON.stringify(details))).toEqual(details);
+  });
+
+  it('stores delisted coins with their reason and delisted_at in the run details', async () => {
+    const h = harness();
+    await runUniverseJob(h.deps);
+    h.setNow('2026-01-12T03:00:00.000Z');
+    h.dropFromMarkets('dogecoin');
+    await runUniverseJob(h.deps);
+    const details = storedDetails(h, '2026-01-12');
+    expect(details.removed).toEqual([
+      { id: 'dogecoin', symbol: 'DOGE', reason: 'out-of-candidate-pool' },
+    ]);
+    expect(details.delisted).toEqual([
+      {
+        id: 'dogecoin',
+        symbol: 'DOGE',
+        reason: 'out-of-candidate-pool',
+        delistedAt: '2026-01-12T03:00:00.000Z',
+      },
+    ]);
+    // The stablecoin list is stored on every successful run, not only when it changes.
+    expect(details.stablecoins.map((s) => s.coingeckoId)).toEqual(['tether']);
   });
 
   it('logs the diff (added, removed, remapped) and the unmapped report', async () => {
@@ -265,7 +330,7 @@ describe('universe job', () => {
     expect(report).toContain('ethereum');
   });
 
-  it('does nothing when the day is already recorded as ok', async () => {
+  it('does nothing when the slot is already recorded as success', async () => {
     const h = harness();
     await runUniverseJob(h.deps);
     const calls = h.fetched.length;
@@ -280,7 +345,7 @@ describe('universe job', () => {
     await runUniverseJob(h.deps);
     h.setNow('2026-01-12T03:00:00.000Z');
     const second = await runUniverseJob(h.deps);
-    expect(second).toMatchObject({ status: 'ok', rows: 0 });
+    expect(second).toMatchObject({ status: 'success', rows: 0 });
     expect(h.store.upsertCalls.at(-1)).toEqual([]);
     expect(h.store.inactiveCalls.at(-1)).toEqual([]);
     expect(diffLine(h.logs)).toMatchObject({ rowsWritten: 0, added: [], removed: [] });
@@ -329,6 +394,7 @@ describe('universe job', () => {
     expect(second.counts.remapped).toBe(1);
     expect(h.store.assets.get('ethereum')?.defillamaChain).toBe('Ethereum');
     expect(JSON.stringify(diffLine(h.logs).remapped)).toContain('Old Name');
+    expect(JSON.stringify(storedDetails(h, '2026-01-12').remapped)).toContain('Old Name');
   });
 
   it('records a failed run, writes nothing, and can run again the next day', async () => {
@@ -341,11 +407,12 @@ describe('universe job', () => {
       rows: 0,
     });
     expect(h.store.runs.get(`${UNIVERSE_JOB}:2026-01-05`)?.error).toContain('/coins/markets');
+    expect(h.store.runs.get(`${UNIVERSE_JOB}:2026-01-05`)?.details).toEqual({});
 
-    // The same day can be retried because the row is not 'ok'.
+    // The same day can be retried because the row is not 'success'.
     const retry = harness();
     const result = await runUniverseJob({ ...retry.deps, store: h.store });
-    expect(result.status).toBe('ok');
+    expect(result.status).toBe('success');
     expect(h.store.assets.size).toBe(3);
   });
 
@@ -374,7 +441,7 @@ describe('universe job', () => {
     expect(h.store.inactiveCalls.every((c) => c.length === 0)).toBe(true);
     const run = h.store.runs.get(`${UNIVERSE_JOB}:2026-01-12`);
     expect(run?.status).toBe('failed');
-    expect(run?.status).not.toBe('ok');
+    expect(run?.status).not.toBe('success');
     expect(
       h.logs.some((l) => l.includes('"event":"source-failures"') && l.includes('volume:bitcoin')),
     ).toBe(true);
@@ -513,7 +580,7 @@ describe('createPrismaUniverseStore', () => {
         updateMany: record('asset.updateMany', { count: 1 }),
       },
       jobRun: {
-        findUnique: record('jobRun.findUnique', { status: 'ok' }),
+        findUnique: record('jobRun.findUnique', { status: 'success' }),
         upsert: record('jobRun.upsert'),
         update: record('jobRun.update'),
       },
@@ -609,28 +676,253 @@ describe('createPrismaUniverseStore', () => {
     expect(calls).toHaveLength(1);
   });
 
-  it('records job runs against the (job, run_date) unique key', async () => {
+  it('records job runs against the (job, run_key) unique key, with status and details', async () => {
     const { db, calls } = fakeDb();
     const store = createPrismaUniverseStore(db);
-    const day = new Date('2026-01-05T00:00:00.000Z');
-    expect(await store.getRun('universe', '2026-01-05')).toEqual({ status: 'ok' });
-    await store.startRun('universe', '2026-01-05', new Date('2026-01-05T03:00:00.000Z'));
+    const startedAt = new Date('2026-01-05T03:00:00.000Z');
+    expect(await store.getRun('universe', '2026-01-05')).toEqual({ status: 'success' });
+    await store.startRun('universe', '2026-01-05', startedAt);
     await store.finishRun('universe', '2026-01-05', {
       status: 'failed',
       finishedAt: new Date('2026-01-05T04:00:00.000Z'),
       rows: 0,
       error: 'boom',
+      details: {},
     });
-    const key = { job_runDate: { job: 'universe', runDate: day } };
+    await store.finishRun('universe', '2026-01-05', {
+      status: 'success',
+      finishedAt: new Date('2026-01-05T04:00:00.000Z'),
+      rows: 2,
+      error: null,
+      details: { added: [{ id: 'bitcoin' }] },
+    });
+    const key = { job_runKey: { job: 'universe', runKey: '2026-01-05' } };
     expect(calls[0]?.args).toMatchObject({ where: key });
     expect(calls[1]?.args).toMatchObject({
       where: key,
-      create: { status: 'running' },
-      update: { status: 'running', finishedAt: null, error: null },
+      create: {
+        job: 'universe',
+        runKey: '2026-01-05',
+        runDate: new Date('2026-01-05T00:00:00.000Z'),
+        status: 'running',
+      },
+      update: { status: 'running', finishedAt: null, error: null, details: {} },
     });
     expect(calls[2]?.args).toMatchObject({
       where: key,
-      data: { status: 'failed', rows: 0, error: 'boom' },
+      data: { status: 'failed', rows: 0, error: 'boom', details: {} },
     });
+    expect(calls[3]?.args).toMatchObject({
+      where: key,
+      data: { status: 'success', rows: 2, details: { added: [{ id: 'bitcoin' }] } },
+    });
+    // The old compound key and the old status never reach the client.
+    expect(JSON.stringify(calls)).not.toContain('job_runDate');
+    expect(JSON.stringify(calls)).not.toContain('"ok"');
+  });
+
+  it('refuses a run key that is not a day or an hour slot', async () => {
+    const { db } = fakeDb();
+    await expect(createPrismaUniverseStore(db).getRun('universe', 'weekly')).rejects.toThrow(
+      /Invalid job_runs run_key/,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Prisma adapter, against a real Postgres with the real migrations applied
+// ---------------------------------------------------------------------------
+
+const baseUrl = process.env['DATABASE_URL'];
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+
+function isUsableDatabaseUrl(url: string | undefined): url is string {
+  if (url === undefined || url === '') return false;
+  if (process.env['CSN_DB_TEST_ALLOW_REMOTE'] === '1') return true;
+  try {
+    return LOCAL_HOSTS.has(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
+const dbUsable = isUsableDatabaseUrl(baseUrl);
+if (!dbUsable) {
+  console.warn(
+    'universe.test.ts real-Postgres checks skipped: set DATABASE_URL to a LOCAL Postgres to run them.',
+  );
+}
+
+const migrationsDir = fileURLToPath(
+  new URL('../../../../packages/db/prisma/migrations/', import.meta.url),
+);
+
+/** Split a Prisma migration into statements (same rule as packages/db/src/database.test.ts). */
+function statementsOf(sql: string): string[] {
+  const withoutComments = sql
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('--'))
+    .join('\n');
+  expect(withoutComments).not.toContain('$$');
+  return withoutComments
+    .split(/;\s*(?:\n|$)/)
+    .map((statement) => statement.trim())
+    .filter((statement) => statement.length > 0);
+}
+
+interface JobRunRow {
+  job: string;
+  run_key: string;
+  run_date: string;
+  status: string;
+  rows: number | null;
+  error: string | null;
+  details: Record<string, unknown>;
+}
+
+describe.skipIf(!dbUsable)('createPrismaUniverseStore (real Postgres, migrations applied)', () => {
+  const schema = `csn_worker_test_${randomBytes(5).toString('hex')}`;
+  let prisma: PrismaClient;
+
+  const jobRuns = () =>
+    prisma.$queryRawUnsafe<JobRunRow[]>(
+      `SELECT job, run_key, run_date::text AS run_date, status, "rows", error, details
+         FROM job_runs ORDER BY run_key`,
+    );
+
+  beforeAll(async () => {
+    const scoped = new URL(baseUrl as string);
+    scoped.searchParams.set('schema', schema);
+    prisma = new PrismaClient({ datasourceUrl: scoped.toString() });
+    await prisma.$executeRawUnsafe(`CREATE SCHEMA "${schema}"`);
+    // Every migration, in order: this is the schema `prisma migrate deploy` builds.
+    const dirs = readdirSync(migrationsDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+    for (const dir of dirs) {
+      const sql = readFileSync(`${migrationsDir}${dir}/migration.sql`, 'utf8');
+      for (const statement of statementsOf(sql)) await prisma.$executeRawUnsafe(statement);
+    }
+    // The reference rows `pnpm -F @coinsnipe/db db:seed` writes; assets.sector_id needs them.
+    for (const [index, row] of SECTORS.entries()) {
+      await prisma.sector.create({ data: { ...row, sortOrder: index } });
+    }
+    for (const [index, row] of NARRATIVES.entries()) {
+      await prisma.narrative.create({ data: { ...row, sortOrder: index } });
+    }
+  }, 120_000);
+
+  afterAll(async () => {
+    await prisma.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+    await prisma.$disconnect();
+  }, 60_000);
+
+  it('runs the real job: a success row keyed by run_key holds the diff, and a rerun is skipped', async () => {
+    const h = harness('2026-01-05T03:00:00.000Z');
+    const deps: UniverseJobDeps = { ...h.deps, store: createPrismaUniverseStore(prisma) };
+
+    const first = await runUniverseJob(deps);
+    expect(first).toMatchObject({ status: 'success', runKey: '2026-01-05', rows: 3 });
+
+    const [row, ...rest] = await jobRuns();
+    expect(rest).toEqual([]);
+    expect(row).toMatchObject({
+      job: 'universe',
+      run_key: '2026-01-05',
+      run_date: '2026-01-05',
+      status: 'success',
+      rows: 3,
+      error: null,
+    });
+    const details = row?.details as unknown as StoredDiff;
+    expect(details.event).toBe('universe-diff');
+    expect(details.added.map((a) => a.id).sort()).toEqual(['bitcoin', 'dogecoin', 'ethereum']);
+    expect(details.stablecoins.map((s) => s.coingeckoId)).toEqual(['tether']);
+    expect(details.removed).toEqual([]);
+
+    // The diff is queryable in SQL, not only readable after loading the row.
+    const added = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT a->>'id' AS id FROM job_runs, jsonb_array_elements(details->'added') AS a
+        WHERE job = 'universe' AND run_key = '2026-01-05' ORDER BY 1`,
+    );
+    expect(added.map((r) => r.id)).toEqual(['bitcoin', 'dogecoin', 'ethereum']);
+    expect(await prisma.asset.count()).toBe(3);
+
+    // A second run in the same slot does not fetch, write or add a row.
+    const fetchedBefore = h.fetched.length;
+    const again = await runUniverseJob(deps);
+    expect(again).toMatchObject({ status: 'skipped', rows: 0 });
+    expect(h.fetched).toHaveLength(fetchedBefore);
+    expect(await jobRuns()).toHaveLength(1);
+  });
+
+  it('stores a later run in its own slot with the delisted coin, reason and delisted_at', async () => {
+    const h = harness('2026-01-12T03:00:00.000Z');
+    h.dropFromMarkets('dogecoin');
+    await runUniverseJob({ ...h.deps, store: createPrismaUniverseStore(prisma) });
+
+    const rows = await jobRuns();
+    expect(rows.map((r) => [r.run_key, r.status])).toEqual([
+      ['2026-01-05', 'success'],
+      ['2026-01-12', 'success'],
+    ]);
+    const details = rows[1]?.details as unknown as StoredDiff;
+    expect(details.delisted).toEqual([
+      {
+        id: 'dogecoin',
+        symbol: 'DOGE',
+        reason: 'out-of-candidate-pool',
+        delistedAt: '2026-01-12T03:00:00.000Z',
+      },
+    ]);
+    expect(details.stablecoins.map((s) => s.coingeckoId)).toEqual(['tether']);
+
+    // The asset row is kept, inactive, with the same instant; nothing was deleted.
+    const doge = await prisma.asset.findUnique({ where: { id: 'dogecoin' } });
+    expect(doge).toMatchObject({ active: false });
+    expect(doge?.delistedAt?.toISOString()).toBe('2026-01-12T03:00:00.000Z');
+    expect(await prisma.asset.count()).toBe(3);
+  });
+
+  it('records a failure as status failed with empty details, then the retry reuses the slot', async () => {
+    const h = harness('2026-01-19T03:00:00.000Z');
+    const store = createPrismaUniverseStore(prisma);
+    h.failMarkets();
+    await expect(runUniverseJob({ ...h.deps, store })).rejects.toThrow(/HTTP 500/);
+
+    const failed = (await jobRuns()).find((r) => r.run_key === '2026-01-19');
+    expect(failed).toMatchObject({ status: 'failed', rows: 0, details: {} });
+    expect(failed?.error).toContain('/coins/markets');
+
+    // The failed slot is not skipped: the retry resets the same row and finishes it.
+    const retry = harness('2026-01-19T05:00:00.000Z');
+    const result = await runUniverseJob({ ...retry.deps, store });
+    expect(result.status).toBe('success');
+    const rows = (await jobRuns()).filter((r) => r.run_key === '2026-01-19');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ status: 'success', error: null });
+    expect((rows[0]?.details as unknown as StoredDiff).event).toBe('universe-diff');
+  });
+
+  it('is bound by the table: an old-vocabulary status or a mismatched slot is rejected', async () => {
+    const insert = (status: string, runKey: string) =>
+      prisma.jobRun
+        .create({
+          data: {
+            job: 'probe',
+            runDate: new Date('2026-02-02T00:00:00.000Z'),
+            runKey,
+            status,
+            startedAt: new Date(),
+          },
+        })
+        .then(
+          () => null,
+          (error: unknown) => String(error),
+        );
+    expect(await insert('ok', '2026-02-02')).toContain('job_runs_status_check');
+    expect(await insert('success', '2026-02-03')).toContain('job_runs_run_key_check');
+    expect(await insert('success', '2026-02-02')).toBeNull();
   });
 });

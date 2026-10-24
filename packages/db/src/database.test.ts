@@ -1067,6 +1067,82 @@ describe.skipIf(!usable)('schema v1.1 behaviour (real Postgres)', () => {
     expect((await prisma.lesson.findUnique({ where: { id: 'v11-lesson' } }))?.unit).toBe('basics');
   });
 
+  it('deleting an alert keeps its delivery rows: alert_id is cleared, cap count and dedupe record stay', async () => {
+    const { prisma } = scratch;
+    await prisma.user.create({ data: { id: 'al-1' } });
+    const alert = await prisma.alert.create({
+      data: { userId: 'al-1', kind: 'level', channel: 'push' },
+    });
+    const key = `alert:${alert.id}:2026-10-24T13`;
+    await prisma.notificationDelivery.create({
+      data: {
+        userId: 'al-1',
+        channel: 'push',
+        kind: 'alert',
+        dedupeKey: key,
+        alertId: alert.id,
+        status: 'sent',
+        sentAt: new Date(),
+      },
+    });
+    const capCount = async () => {
+      const rows = await prisma.$queryRaw<{ n: bigint }[]>`
+        SELECT count(DISTINCT dedupe_key)::bigint AS n FROM notification_deliveries
+        WHERE user_id = 'al-1' AND kind IN ('signal', 'alert') AND status = 'sent'
+          AND sent_at >= now() - interval '1 hour'`;
+      return Number(rows[0]?.n);
+    };
+    expect(await capCount()).toBe(1);
+
+    await prisma.alert.delete({ where: { id: alert.id } });
+
+    const kept = await prisma.notificationDelivery.findFirstOrThrow({ where: { userId: 'al-1' } });
+    expect(kept.alertId).toBeNull();
+    expect([kept.status, kept.dedupeKey]).toEqual(['sent', key]);
+    expect(await capCount()).toBe(1); // today's cap count is unchanged
+    // The dedupe record still blocks a second send for the same alert hour.
+    const reclaimed = await prisma.$queryRaw<{ id: bigint }[]>`
+      INSERT INTO notification_deliveries (user_id, channel, kind, dedupe_key, status)
+      VALUES ('al-1', 'push', 'alert', ${key}, 'pending')
+      ON CONFLICT (user_id, channel, dedupe_key) DO UPDATE SET status = 'pending'
+        WHERE notification_deliveries.status IN ('pending', 'failed')
+      RETURNING id`;
+    expect(reclaimed).toHaveLength(0);
+  });
+
+  it('indexes pending and failed delivery rows with a small partial index the sweep uses', async () => {
+    const { prisma } = scratch;
+    await prisma.user.create({ data: { id: 'sw-1' } });
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO notification_deliveries (user_id, channel, kind, dedupe_key, status, sent_at)
+      SELECT 'sw-1', 'push', 'signal', 'sweep:' || g,
+             CASE WHEN g % 500 = 0 THEN 'pending' WHEN g % 700 = 0 THEN 'failed' ELSE 'sent' END,
+             CASE WHEN g % 500 = 0 OR g % 700 = 0 THEN NULL ELSE now() END
+      FROM generate_series(1, 6000) g`);
+    await prisma.$executeRawUnsafe('ANALYZE notification_deliveries');
+    const live = await catalogueModel(prisma, scratch.name);
+    const open = live.indexes.find((index) => index.name === 'notification_deliveries_open_idx');
+    expect(open).toMatchObject({
+      table: 'notification_deliveries',
+      columns: ['status'],
+      partial: true,
+      unique: false,
+      method: 'btree',
+    });
+    const plan = await prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRawUnsafe<Record<string, string>[]>(
+        `EXPLAIN SELECT id FROM notification_deliveries WHERE status IN ('pending', 'failed')`,
+      );
+      return rows.map((row) => Object.values(row)[0]).join('\n');
+    });
+    expect(plan).toContain('notification_deliveries_open_idx');
+    // The partial index holds only the open rows, far fewer than the table.
+    const sizes = await prisma.$queryRaw<{ idx: bigint; tbl: bigint }[]>`
+      SELECT pg_relation_size(to_regclass(${`"${scratch.name}".notification_deliveries_open_idx`})) AS idx,
+             pg_relation_size(to_regclass(${`"${scratch.name}".notification_deliveries_user_id_channel_dedupe_key_key`})) AS tbl`;
+    expect(Number(sizes[0]?.idx)).toBeLessThan(Number(sizes[0]?.tbl) / 4);
+  });
+
   it('as-of rule: an in-place restatement keeps the row visible; advancing as_of would drop it', async () => {
     const { prisma } = scratch;
     const upsertRestatement = async (close: string, asOf: string) =>
@@ -1348,7 +1424,7 @@ describe.skipIf(!usable)('notification delivery protocol (real Postgres)', () =>
     url.searchParams.set('connection_limit', '16');
     pool = new PrismaClient({ datasourceUrl: url.toString() });
     await scratch.prisma.user.createMany({
-      data: [{ id: 'dp-claim' }, { id: 'dp-crash' }, { id: 'dp-cap' }, { id: 'dp-nolock' }],
+      data: [{ id: 'dp-claim' }, { id: 'dp-crash' }, { id: 'dp-cap' }, { id: 'dp-both' }],
     });
   }, 120_000);
 
@@ -1368,12 +1444,14 @@ describe.skipIf(!usable)('notification delivery protocol (real Postgres)', () =>
     userId: string;
     key: string;
     sends: string[];
+    channel?: 'push' | 'email';
     cap?: number;
     userLock?: boolean;
     sendMs?: number;
     crash?: boolean;
   }): Promise<Outcome> {
     const { userId, key, sends } = options;
+    const channel = options.channel ?? 'push';
     return pool.$transaction(
       async (tx) => {
         if (options.userLock === true) {
@@ -1381,7 +1459,7 @@ describe.skipIf(!usable)('notification delivery protocol (real Postgres)', () =>
         }
         const claimed = await tx.$queryRaw<{ id: bigint }[]>`
           INSERT INTO notification_deliveries (user_id, channel, kind, dedupe_key, status)
-          VALUES (${userId}, 'push', 'signal', ${key}, 'pending')
+          VALUES (${userId}, ${channel}::alert_channel, 'signal', ${key}, 'pending')
           ON CONFLICT (user_id, channel, dedupe_key) DO UPDATE
             SET signal_id = COALESCE(EXCLUDED.signal_id, notification_deliveries.signal_id)
             WHERE notification_deliveries.status IN ('pending', 'failed')
@@ -1389,11 +1467,18 @@ describe.skipIf(!usable)('notification delivery protocol (real Postgres)', () =>
         const id = claimed[0]?.id;
         if (id === undefined) return 'skipped';
         if (options.cap !== undefined) {
-          const counted = await tx.$queryRaw<{ n: bigint }[]>`
-            SELECT count(*)::bigint AS n FROM notification_deliveries
+          // The README recipe: the cap counts distinct notifications (dedupe keys), so a send
+          // on push and on email counts once, and the second channel of a counted one passes.
+          const counted = await tx.$queryRaw<
+            { distinct_sent: bigint; key_already_sent: boolean }[]
+          >`
+            SELECT count(DISTINCT dedupe_key)::bigint AS distinct_sent,
+                   COALESCE(bool_or(dedupe_key = ${key}), false) AS key_already_sent
+            FROM notification_deliveries
             WHERE user_id = ${userId} AND kind IN ('signal', 'alert') AND status = 'sent'
               AND sent_at >= now() - interval '1 hour'`;
-          if (Number(counted[0]?.n) >= options.cap) {
+          const row = counted[0];
+          if (row?.key_already_sent !== true && Number(row?.distinct_sent) >= options.cap) {
             await tx.$executeRaw`UPDATE notification_deliveries SET status = 'batched' WHERE id = ${id}`;
             return 'batched';
           }
@@ -1515,6 +1600,82 @@ describe.skipIf(!usable)('notification delivery protocol (real Postgres)', () =>
       where: { userId: 'dp-cap', status: 'sent' },
     });
     expect(sent).toBe(3);
+  }, 60_000);
+  it('counts the daily cap per distinct notification: both channels on, six signals, five delivered', async () => {
+    // The review scenario: cap 5, push and email both on, one send per channel per signal.
+    const { prisma } = scratch;
+    const sends: string[] = [];
+    const outcomes: Record<string, Outcome[]> = {};
+    for (let signal = 1; signal <= 6; signal += 1) {
+      const key = `signal:${signal}`;
+      outcomes[key] = [
+        await deliver({ userId: 'dp-both', key, sends, channel: 'push', cap: 5, userLock: true }),
+        await deliver({ userId: 'dp-both', key, sends, channel: 'email', cap: 5, userLock: true }),
+      ];
+    }
+    for (let signal = 1; signal <= 5; signal += 1) {
+      expect(outcomes[`signal:${signal}`], `signal ${signal}`).toEqual(['sent', 'sent']);
+    }
+    expect(outcomes['signal:6']).toEqual(['batched', 'batched']);
+    const distinct = await prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(DISTINCT dedupe_key)::bigint AS n FROM notification_deliveries
+      WHERE user_id = 'dp-both' AND status = 'sent'`;
+    expect(Number(distinct[0]?.n)).toBe(5); // five distinct signals reached the user, not three
+    expect(
+      await prisma.notificationDelivery.count({ where: { userId: 'dp-both', status: 'sent' } }),
+    ).toBe(10);
+    expect(
+      await prisma.notificationDelivery.count({ where: { userId: 'dp-both', status: 'batched' } }),
+    ).toBe(2);
+    expect(sends).toHaveLength(10);
+    // A batched row is terminal: it is not claimed again.
+    expect(
+      await deliver({
+        userId: 'dp-both',
+        key: 'signal:6',
+        sends,
+        channel: 'push',
+        cap: 5,
+        userLock: true,
+      }),
+    ).toBe('skipped');
+  }, 60_000);
+
+  it('keeps the same cap rule when the 12 deliveries run concurrently', async () => {
+    await scratch.prisma.user.create({ data: { id: 'dp-both-2' } });
+    const sends: string[] = [];
+    const jobs = [];
+    for (let signal = 1; signal <= 6; signal += 1) {
+      for (const channel of ['push', 'email'] as const) {
+        jobs.push(
+          deliver({
+            userId: 'dp-both-2',
+            key: `signal:${signal}`,
+            sends,
+            channel,
+            cap: 5,
+            userLock: true,
+            sendMs: 20,
+          }),
+        );
+      }
+    }
+    await Promise.all(jobs);
+    const rows = await scratch.prisma.notificationDelivery.findMany({
+      where: { userId: 'dp-both-2' },
+    });
+    const sentKeys = new Set(
+      rows.filter((row) => row.status === 'sent').map((row) => row.dedupeKey),
+    );
+    expect(sentKeys.size).toBe(5);
+    // Every notification is either delivered on both channels or withheld on both.
+    for (const key of new Set(rows.map((row) => row.dedupeKey))) {
+      const statuses = rows.filter((row) => row.dedupeKey === key).map((row) => row.status);
+      expect(
+        statuses.every((status) => status === statuses[0]),
+        key,
+      ).toBe(true);
+    }
   }, 60_000);
 });
 
