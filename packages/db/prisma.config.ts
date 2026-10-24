@@ -13,7 +13,8 @@ export default defineConfig({
   migrations: {
     path: 'prisma/migrations',
     // Runs after `prisma migrate reset`. Reference data only (sectors and narratives).
-    // `migrate dev` and `migrate deploy` do not run it: run `pnpm db:seed` per environment.
+    // `migrate deploy` never runs it, and `migrate dev` runs it only when it creates or resets the
+    // database: run `pnpm db:seed` explicitly in every environment (idempotent).
     seed: 'tsx src/seed.ts',
   },
 });

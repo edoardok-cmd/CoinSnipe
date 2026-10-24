@@ -14,6 +14,10 @@ const migrationsDir = `${prismaDir}migrations/`;
 const migrationSql = readFileSync(`${migrationsDir}0001_init/migration.sql`, 'utf8');
 const migration0002 = readFileSync(`${migrationsDir}0002_schema_v1_1/migration.sql`, 'utf8');
 const schemaPrisma = readFileSync(`${prismaDir}schema.prisma`, 'utf8');
+const prismaConfig = readFileSync(
+  fileURLToPath(new URL('../prisma.config.ts', import.meta.url)),
+  'utf8',
+);
 const readme = readFileSync(fileURLToPath(new URL('../README.md', import.meta.url)), 'utf8');
 /** Every migration in apply order, replayed into a schema model. */
 const migrationDirs = readdirSync(migrationsDir, { withFileTypes: true })
@@ -430,5 +434,87 @@ describe('documentation (F3, S4, S5)', () => {
 
   it('documents env loading for the db scripts', () => {
     expect(readme).toMatch(/\.env\.local/);
+  });
+});
+
+describe('lock safety, seed wording and rollback honesty in 0002 (review fixes)', () => {
+  const code = migration0002
+    .split('\n')
+    .filter((line) => !line.startsWith('--'))
+    .join('\n');
+  const flat = migration0002
+    .slice(0, migration0002.indexOf('\nSET LOCAL'))
+    .replace(/\n--\s*/g, ' ');
+
+  it('starts with SET LOCAL lock_timeout = 5s, the first statement of the file', () => {
+    expect(code.trimStart().startsWith("SET LOCAL lock_timeout = '5s';")).toBe(true);
+    expect(migration0002.match(/lock_timeout/g)?.length).toBeGreaterThanOrEqual(2); // header + statement
+  });
+
+  it('states the deadlock risk, quiet writers and the retry in the Safety section', () => {
+    expect(flat).toMatch(/Apply 0002 while writers are quiet or stopped/);
+    expect(flat).toMatch(/can deadlock with this file/);
+    expect(flat).toMatch(/lock_timeout or deadlock failure is safe: nothing is applied/);
+    expect(flat).not.toMatch(/concurrent writers wait for the commit\./);
+  });
+
+  it('says the reverse SQL does not undo the status normalisation and loses the original text', () => {
+    expect(flat).toMatch(/does NOT undo the job_runs status normalisation/);
+    expect(flat).toMatch(/original status text is lost/);
+  });
+
+  it('ends the reverse SQL with the migration-history delete', () => {
+    const block =
+      /-- >>> ROLLBACK-SQL\n([\s\S]*?)-- <<< ROLLBACK-SQL/.exec(migration0002)?.[1] ?? '';
+    const lines = block.split('\n').filter((line) => line.startsWith('-- | '));
+    expect(lines.at(-1)).toBe(
+      `-- | DELETE FROM "_prisma_migrations" WHERE "migration_name" = '0002_schema_v1_1';`,
+    );
+  });
+
+  it('states the seed behaviour accurately everywhere and never the old claim', () => {
+    for (const [name, text] of [
+      ['migration 0002', migration0002],
+      ['README', readme],
+      ['prisma.config.ts', prismaConfig],
+      ['schema.prisma', schemaPrisma],
+    ] as const) {
+      // The retired wording: that migrate dev never seeds.
+      expect(text, name).not.toMatch(
+        /(migrate dev|db:migrate)[^.\n]*(do not|does not|never) run[^.\n]*seed/i,
+      );
+      expect(text, name).not.toMatch(/only `?db:reset`? does/i);
+    }
+    expect(readme).toMatch(/`migrate deploy` never runs the seed/);
+    expect(readme).toMatch(
+      /`migrate dev` and `migrate reset` run it only when they create or reset the database/,
+    );
+    expect(migration0002).toMatch(
+      /`prisma migrate deploy` never runs the seed; `prisma migrate dev` and/,
+    );
+    expect(prismaConfig).toMatch(
+      /`migrate deploy` never runs it, and `migrate dev` runs it only when it creates/,
+    );
+  });
+
+  it('documents the lock-timeout and quiet-writer rule in the README', () => {
+    expect(readme).toMatch(/SET LOCAL lock_timeout = '5s'/);
+    expect(readme).toMatch(/while writers are quiet or stopped/);
+    expect(readme).toMatch(/can deadlock with the migration/);
+    expect(readme).toMatch(/original `job_runs` status text, which is lost after a revert/);
+  });
+
+  it('documents the CSN-060 delivery protocol: claim statement, retry, per-user lock', () => {
+    expect(readme).toMatch(
+      /ON CONFLICT \(user_id, channel, dedupe_key\) DO UPDATE SET [^`]*WHERE notification_deliveries\.status IN \('pending', 'failed'\) RETURNING id/,
+    );
+    expect(readme).toMatch(
+      /pg_advisory_xact_lock\(hashtextextended\('notify:' \|\| <user_id>, 0\)\)/,
+    );
+    expect(readme).toMatch(/FROM notification_prefs WHERE user_id = <user_id> FOR UPDATE/);
+    expect(readme).toMatch(/at least once/);
+    expect(readme).not.toMatch(/DO NOTHING` and send only when a row was inserted/);
+    expect(schemaPrisma).toMatch(/WHERE status IN \('pending', 'failed'\) RETURNING id/);
+    expect(schemaPrisma).toMatch(/per-user advisory lock/);
   });
 });

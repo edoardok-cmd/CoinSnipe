@@ -52,6 +52,8 @@ function statementsOf(sql: string): string[] {
 
 interface ScratchSchema {
   readonly name: string;
+  /** Connection URL scoped to this schema, for extra connections. */
+  readonly url: string;
   readonly prisma: PrismaClient;
   drop(): Promise<void>;
 }
@@ -80,6 +82,7 @@ async function createScratchSchema(url: string, upTo?: number): Promise<ScratchS
   }
   return {
     name,
+    url: scoped.toString(),
     prisma,
     drop: async () => {
       await prisma.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${name}" CASCADE`);
@@ -1091,6 +1094,31 @@ describe.skipIf(!usable)('schema v1.1 behaviour (real Postgres)', () => {
   });
 });
 
+/** Every spelling the 0002 backfill maps, with the status it must end as. */
+const STATUS_BACKFILL: readonly (readonly [spelling: string, expected: string])[] = [
+  ['running', 'running'],
+  ['success', 'success'],
+  ['failed', 'failed'],
+  ['succeeded', 'success'],
+  ['completed', 'success'],
+  ['complete', 'success'],
+  ['ok', 'success'],
+  ['done', 'success'],
+  ['started', 'running'],
+  ['in_progress', 'running'],
+  ['pending', 'running'],
+  // lower() and btrim() before matching
+  [' Completed ', 'success'],
+  ['SUCCEEDED', 'success'],
+  [' Started', 'running'],
+  // the fallthrough: anything else is failed, so the idempotent skip re-runs it
+  ['failure', 'failed'],
+  ['error', 'failed'],
+  ['skipped', 'failed'],
+  ['weird-state', 'failed'],
+  ['', 'failed'],
+];
+
 describe.skipIf(!usable)('upgrade 0001 to 0002 over existing rows (real Postgres)', () => {
   let scratch: ScratchSchema;
 
@@ -1102,19 +1130,12 @@ describe.skipIf(!usable)('upgrade 0001 to 0002 over existing rows (real Postgres
     await scratch.drop();
   }, 60_000);
 
-  it('preserves rows, normalises job_runs and fills the new columns', async () => {
+  it('preserves rows, normalises every job_runs status spelling and fills the new columns', async () => {
     const { prisma } = scratch;
-    const jobs: [string, string, string][] = [
-      ['prices', '2026-01-05', 'succeeded'],
-      ['prices', '2026-01-06', 'running'],
-      ['scoring', '2026-01-05', 'failed'],
-      ['universe', '2026-01-05', 'weird-state'],
-      ['macro', '2026-01-05', ' Completed '],
-      ['news', '2026-01-07', 'started'],
-    ];
-    for (const [job, date, status] of jobs) {
+    // One row per spelling, each its own job so nothing collides.
+    for (const [index, [spelling]] of STATUS_BACKFILL.entries()) {
       await prisma.$executeRawUnsafe(
-        `INSERT INTO job_runs (job, run_date, status, started_at, rows, error) VALUES ('${job}', '${date}', '${status}', now(), 7, NULL)`,
+        `INSERT INTO job_runs (job, run_date, status, started_at, rows, error) VALUES ('job-${index}', DATE '2026-01-05' + ${index}, '${spelling}', now(), 7, NULL)`,
       );
     }
     await prisma.$executeRawUnsafe(`INSERT INTO users (id) VALUES ('old-1'), ('old-2')`);
@@ -1142,25 +1163,21 @@ describe.skipIf(!usable)('upgrade 0001 to 0002 over existing rows (real Postgres
         details: unknown;
         rows: number;
       }[]
-    >`SELECT job, to_char(run_date, 'YYYY-MM-DD') AS run_date, status, run_key, details, rows FROM job_runs ORDER BY id`;
-    expect(runs).toHaveLength(6);
-    expect(runs.map((r) => r.status)).toEqual([
-      'success',
-      'running',
-      'failed',
-      'failed',
-      'success',
-      'running',
-    ]);
-    expect(runs.every((r) => r.run_key === r.run_date && r.rows === 7)).toBe(true);
-    expect(runs.map((r) => r.details)).toEqual([
-      { legacy_status: 'succeeded' },
-      {},
-      {},
-      { legacy_status: 'weird-state' },
-      { legacy_status: ' Completed ' },
-      { legacy_status: 'started' },
-    ]);
+    >`SELECT job, to_char(run_date, 'YYYY-MM-DD') AS run_date, status, run_key, details, rows
+      FROM job_runs ORDER BY run_date`;
+    expect(runs).toHaveLength(STATUS_BACKFILL.length);
+    const exactVocabulary = new Set(['running', 'success', 'failed']);
+    for (const [index, [spelling, expected]] of STATUS_BACKFILL.entries()) {
+      const run = runs[index];
+      expect(run?.job, spelling).toBe(`job-${index}`);
+      expect(run?.status, `status for ${JSON.stringify(spelling)}`).toBe(expected);
+      expect(run?.run_key).toBe(run?.run_date);
+      expect(run?.rows).toBe(7);
+      // The original text is kept for every spelling outside the exact vocabulary.
+      expect(run?.details, `details for ${JSON.stringify(spelling)}`).toEqual(
+        exactVocabulary.has(spelling) ? {} : { legacy_status: spelling },
+      );
+    }
     const prefs = await prisma.notificationPref.findMany({ orderBy: { userId: 'asc' } });
     expect(
       prefs.map((p) => [
@@ -1203,7 +1220,7 @@ describe.skipIf(!usable)('upgrade 0001 to 0002 over existing rows (real Postgres
       await rejectsWithUniqueViolation(
         prisma.jobRun.create({
           data: {
-            job: 'prices',
+            job: 'job-0',
             runDate: day('2026-01-05'),
             runKey: '2026-01-05',
             status: 'running',
@@ -1214,7 +1231,7 @@ describe.skipIf(!usable)('upgrade 0001 to 0002 over existing rows (real Postgres
     ).toBe(true);
     await prisma.jobRun.create({
       data: {
-        job: 'prices',
+        job: 'job-0',
         runDate: day('2026-01-05'),
         runKey: '2026-01-05T09',
         status: 'running',
@@ -1224,21 +1241,300 @@ describe.skipIf(!usable)('upgrade 0001 to 0002 over existing rows (real Postgres
   });
 });
 
+describe.skipIf(!usable)('migration 0002 lock safety (real Postgres)', () => {
+  let scratch: ScratchSchema;
+  let holder: PrismaClient;
+
+  beforeAll(async () => {
+    scratch = await createScratchSchema(baseUrl as string, 1);
+    holder = new PrismaClient({ datasourceUrl: scratch.url });
+  }, 120_000);
+
+  afterAll(async () => {
+    await holder.$disconnect();
+    await scratch.drop();
+  }, 60_000);
+
+  it('fails cleanly within the lock timeout when a lock is held, applies nothing, and retries', async () => {
+    const { prisma } = scratch;
+    const statements = statementsOf(
+      readFileSync(`${migrationsDir}0002_schema_v1_1/migration.sql`, 'utf8'),
+    );
+    // The first statement of the file is the timeout.
+    expect(statements[0]).toBe("SET LOCAL lock_timeout = '5s'");
+
+    // A second connection holds a reader's lock on a table the file alters late.
+    let release: () => void = () => undefined;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let locked: () => void = () => undefined;
+    const lockedP = new Promise<void>((resolve) => {
+      locked = resolve;
+    });
+    const holding = holder.$transaction(
+      async (tx) => {
+        await tx.$executeRawUnsafe('LOCK TABLE notification_prefs IN ACCESS SHARE MODE');
+        locked();
+        await released;
+      },
+      { timeout: 60_000 },
+    );
+    await lockedP;
+
+    let timeoutSeen = '';
+    const started = Date.now();
+    let failure: string | null = null;
+    try {
+      await prisma.$transaction(
+        async (tx) => {
+          for (const [index, statement] of statements.entries()) {
+            await tx.$executeRawUnsafe(statement);
+            if (index === 0) {
+              // The file's own statement set the 5 s timeout; shorten it so the test is fast.
+              const shown =
+                await tx.$queryRawUnsafe<{ lock_timeout: string }[]>('SHOW lock_timeout');
+              timeoutSeen = shown[0]?.lock_timeout ?? '';
+              await tx.$executeRawUnsafe("SET LOCAL lock_timeout = '300ms'");
+            }
+          }
+        },
+        { timeout: 30_000 },
+      );
+    } catch (error) {
+      failure = String(error);
+    }
+    const elapsed = Date.now() - started;
+    release();
+    await holding;
+
+    expect(timeoutSeen).toBe('5s');
+    expect(failure).not.toBeNull();
+    expect(failure).toContain('lock timeout');
+    expect(elapsed).toBeLessThan(5_000);
+
+    // Nothing from the file survived, including statements that ran before the blocked one.
+    const indexes = await prisma.$queryRaw<{ indexname: string }[]>`
+      SELECT indexname::text FROM pg_indexes WHERE schemaname = ${scratch.name}`;
+    const names = indexes.map((row) => row.indexname);
+    expect(names).toContain('events_calendar_asset_id_date_idx');
+    expect(names).toContain('key_levels_asset_id_date_idx');
+    expect(names).toContain('job_runs_job_run_date_key');
+    expect(names).not.toContain('job_runs_job_run_key_key');
+    const columns = await prisma.$queryRaw<{ column_name: string }[]>`
+      SELECT column_name::text FROM information_schema.columns
+      WHERE table_schema = ${scratch.name} AND table_name = 'job_runs'`;
+    expect(columns.map((row) => row.column_name)).not.toContain('run_key');
+    const table = await prisma.$queryRaw<{ found: string | null }[]>`
+      SELECT to_regclass(${`"${scratch.name}".notification_deliveries`})::text AS found`;
+    expect(table[0]?.found).toBeNull();
+
+    // Once the lock is gone, the retry applies the whole file.
+    await applyMigration(prisma, '0002_schema_v1_1');
+    const after = await prisma.$queryRaw<{ found: string | null }[]>`
+      SELECT to_regclass(${`"${scratch.name}".notification_deliveries`})::text AS found`;
+    expect(after[0]?.found).not.toBeNull();
+  }, 60_000);
+});
+
+describe.skipIf(!usable)('notification delivery protocol (real Postgres)', () => {
+  let scratch: ScratchSchema;
+  let pool: PrismaClient;
+
+  beforeAll(async () => {
+    scratch = await createScratchSchema(baseUrl as string);
+    const url = new URL(scratch.url);
+    url.searchParams.set('connection_limit', '16');
+    pool = new PrismaClient({ datasourceUrl: url.toString() });
+    await scratch.prisma.user.createMany({
+      data: [{ id: 'dp-claim' }, { id: 'dp-crash' }, { id: 'dp-cap' }, { id: 'dp-nolock' }],
+    });
+  }, 120_000);
+
+  afterAll(async () => {
+    await pool.$disconnect();
+    await scratch.drop();
+  }, 60_000);
+
+  const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+  type Outcome = 'skipped' | 'sent' | 'batched';
+
+  /**
+   * The README recipe for one delivery, in one transaction: per-user lock (optional here so
+   * the claim can be tested on its own), claim, daily-cap count, send, mark.
+   */
+  async function deliver(options: {
+    userId: string;
+    key: string;
+    sends: string[];
+    cap?: number;
+    userLock?: boolean;
+    sendMs?: number;
+    crash?: boolean;
+  }): Promise<Outcome> {
+    const { userId, key, sends } = options;
+    return pool.$transaction(
+      async (tx) => {
+        if (options.userLock === true) {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`notify:${userId}`}, 0))`;
+        }
+        const claimed = await tx.$queryRaw<{ id: bigint }[]>`
+          INSERT INTO notification_deliveries (user_id, channel, kind, dedupe_key, status)
+          VALUES (${userId}, 'push', 'signal', ${key}, 'pending')
+          ON CONFLICT (user_id, channel, dedupe_key) DO UPDATE
+            SET signal_id = COALESCE(EXCLUDED.signal_id, notification_deliveries.signal_id)
+            WHERE notification_deliveries.status IN ('pending', 'failed')
+          RETURNING id`;
+        const id = claimed[0]?.id;
+        if (id === undefined) return 'skipped';
+        if (options.cap !== undefined) {
+          const counted = await tx.$queryRaw<{ n: bigint }[]>`
+            SELECT count(*)::bigint AS n FROM notification_deliveries
+            WHERE user_id = ${userId} AND kind IN ('signal', 'alert') AND status = 'sent'
+              AND sent_at >= now() - interval '1 hour'`;
+          if (Number(counted[0]?.n) >= options.cap) {
+            await tx.$executeRaw`UPDATE notification_deliveries SET status = 'batched' WHERE id = ${id}`;
+            return 'batched';
+          }
+        }
+        sends.push(key); // the "send"
+        await sleep(options.sendMs ?? 0);
+        if (options.crash === true) throw new Error('worker crashed before commit');
+        await tx.$executeRaw`UPDATE notification_deliveries SET status = 'sent', sent_at = now() WHERE id = ${id}`;
+        return 'sent';
+      },
+      { timeout: 30_000, maxWait: 30_000 },
+    );
+  }
+
+  const statusOf = async (userId: string, key: string) =>
+    (
+      await scratch.prisma.notificationDelivery.findFirst({
+        where: { userId, dedupeKey: key },
+        select: { status: true },
+      })
+    )?.status ?? null;
+
+  it('two concurrent claimers of one key send once, whether the row is new or pending', async () => {
+    const sends: string[] = [];
+    const outcomes = await Promise.all([
+      deliver({ userId: 'dp-claim', key: 'new', sends, sendMs: 300 }),
+      deliver({ userId: 'dp-claim', key: 'new', sends, sendMs: 300 }),
+    ]);
+    expect(outcomes.sort()).toEqual(['sent', 'skipped']);
+    expect(sends).toEqual(['new']);
+
+    // A row committed as pending (held for quiet hours) is claimed by the same statement.
+    await scratch.prisma.notificationDelivery.create({
+      data: {
+        userId: 'dp-claim',
+        channel: 'push',
+        kind: 'signal',
+        dedupeKey: 'held',
+        status: 'pending',
+      },
+    });
+    const heldSends: string[] = [];
+    const held = await Promise.all([
+      deliver({ userId: 'dp-claim', key: 'held', sends: heldSends, sendMs: 300 }),
+      deliver({ userId: 'dp-claim', key: 'held', sends: heldSends, sendMs: 300 }),
+    ]);
+    expect(held.sort()).toEqual(['sent', 'skipped']);
+    expect(heldSends).toEqual(['held']);
+    expect(await statusOf('dp-claim', 'held')).toBe('sent');
+  });
+
+  it('reclaims a pending row left by a crash and a failed row, but never a sent or batched one', async () => {
+    const { prisma } = scratch;
+    await prisma.notificationDelivery.create({
+      data: {
+        userId: 'dp-crash',
+        channel: 'push',
+        kind: 'signal',
+        dedupeKey: 'pend',
+        status: 'pending',
+      },
+    });
+    const sends: string[] = [];
+    await expect(deliver({ userId: 'dp-crash', key: 'pend', sends, crash: true })).rejects.toThrow(
+      'worker crashed',
+    );
+    expect(await statusOf('dp-crash', 'pend')).toBe('pending'); // rolled back, still claimable
+    expect(await deliver({ userId: 'dp-crash', key: 'pend', sends })).toBe('sent');
+    expect(sends).toEqual(['pend', 'pend']); // the crashed attempt did send once: at least once
+
+    // A new key whose first attempt crashes leaves no row at all, so the retry inserts it.
+    await expect(
+      deliver({ userId: 'dp-crash', key: 'fresh', sends, crash: true }),
+    ).rejects.toThrow();
+    expect(await statusOf('dp-crash', 'fresh')).toBeNull();
+    expect(await deliver({ userId: 'dp-crash', key: 'fresh', sends })).toBe('sent');
+
+    await prisma.notificationDelivery.create({
+      data: {
+        userId: 'dp-crash',
+        channel: 'push',
+        kind: 'signal',
+        dedupeKey: 'bad',
+        status: 'failed',
+      },
+    });
+    expect(await deliver({ userId: 'dp-crash', key: 'bad', sends })).toBe('sent');
+    expect(await deliver({ userId: 'dp-crash', key: 'bad', sends })).toBe('skipped'); // now sent
+    await prisma.notificationDelivery.create({
+      data: {
+        userId: 'dp-crash',
+        channel: 'push',
+        kind: 'signal',
+        dedupeKey: 'over',
+        status: 'batched',
+      },
+    });
+    expect(await deliver({ userId: 'dp-crash', key: 'over', sends })).toBe('skipped');
+  });
+
+  it('with the per-user lock, concurrent jobs never send past the daily cap', async () => {
+    const sends: string[] = [];
+    const outcomes = await Promise.all(
+      Array.from({ length: 8 }, (_, index) =>
+        deliver({
+          userId: 'dp-cap',
+          key: `cap-${index}`,
+          sends,
+          cap: 3,
+          userLock: true,
+          sendMs: 60,
+        }),
+      ),
+    );
+    expect(outcomes.filter((outcome) => outcome === 'sent')).toHaveLength(3);
+    expect(outcomes.filter((outcome) => outcome === 'batched')).toHaveLength(5);
+    expect(sends).toHaveLength(3);
+    const sent = await scratch.prisma.notificationDelivery.count({
+      where: { userId: 'dp-cap', status: 'sent' },
+    });
+    expect(sent).toBe(3);
+  });
+});
+
 describe.skipIf(!usable)('documented rollback of 0002 (real Postgres)', () => {
   let migrated: ScratchSchema;
   let baseline: ScratchSchema;
+  let fresh: ScratchSchema;
 
   beforeAll(async () => {
     migrated = await createScratchSchema(baseUrl as string, 2);
     baseline = await createScratchSchema(baseUrl as string, 1);
+    fresh = await createScratchSchema(baseUrl as string, 2);
   }, 120_000);
 
   afterAll(async () => {
     await migrated.drop();
     await baseline.drop();
+    await fresh.drop();
   }, 60_000);
 
-  it('reverts a populated 0002 schema to exactly the 0001 schema and keeps older data', async () => {
+  it('reverts a populated 0002 schema in one transaction, then 0002 re-applies cleanly', async () => {
     const { prisma } = migrated;
     await seedReferenceData(prisma);
     await prisma.user.create({ data: { id: 'rb-1' } });
@@ -1291,7 +1587,15 @@ describe.skipIf(!usable)('documented rollback of 0002 (real Postgres)', () => {
         optionExplanations: ['x', 'y'],
       },
     });
+    // The migration history table Prisma keeps; the reverse SQL's last statement edits it.
+    await prisma.$executeRawUnsafe(
+      `CREATE TABLE "_prisma_migrations" ("migration_name" TEXT NOT NULL)`,
+    );
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "_prisma_migrations" VALUES ('0001_init'), ('0002_schema_v1_1')`,
+    );
 
+    // Exactly the lines in the header, as one transaction.
     const sql = readFileSync(`${migrationsDir}0002_schema_v1_1/migration.sql`, 'utf8');
     const block = /-- >>> ROLLBACK-SQL\n([\s\S]*?)-- <<< ROLLBACK-SQL/.exec(sql)?.[1] ?? '';
     const statements = block
@@ -1299,16 +1603,28 @@ describe.skipIf(!usable)('documented rollback of 0002 (real Postgres)', () => {
       .filter((line) => line.startsWith('-- | '))
       .map((line) => line.slice(5).trim().replace(/;$/, ''));
     expect(statements.length).toBeGreaterThan(10);
-    for (const statement of statements) {
-      await prisma.$executeRawUnsafe(statement);
-    }
+    expect(statements.at(-1)).toBe(
+      `DELETE FROM "_prisma_migrations" WHERE "migration_name" = '0002_schema_v1_1'`,
+    );
+    await prisma.$transaction(
+      async (tx) => {
+        for (const statement of statements) await tx.$executeRawUnsafe(statement);
+      },
+      { timeout: 30_000 },
+    );
 
+    const history = await prisma.$queryRaw<{ migration_name: string }[]>`
+      SELECT migration_name FROM "_prisma_migrations"`;
+    expect(history.map((row) => row.migration_name)).toEqual(['0001_init']);
+    await prisma.$executeRawUnsafe(`DROP TABLE "_prisma_migrations"`);
     expect(await describeSchema(prisma, migrated.name)).toEqual(
       await describeSchema(baseline.prisma, baseline.name),
     );
     // What the header says it keeps: daily rows, users, reference data, content, prefs and alerts.
-    const runs = await prisma.$queryRaw<{ job: string }[]>`SELECT job FROM job_runs ORDER BY job`;
+    const runs = await prisma.$queryRaw<{ job: string; status: string }[]>`
+      SELECT job, status FROM job_runs ORDER BY job`;
     expect(runs.map((r) => r.job)).toEqual(['rb-daily', 'rb-hourly']);
+    expect(runs.map((r) => r.status)).toEqual(['failed', 'success']); // status text is not restored
     expect(await prisma.sector.count()).toBe(11);
     expect(await prisma.narrative.count()).toBe(20);
     expect(await prisma.user.count()).toBe(1);
@@ -1316,5 +1632,19 @@ describe.skipIf(!usable)('documented rollback of 0002 (real Postgres)', () => {
     expect(await prisma.quickCheck.count()).toBe(1);
     expect(await prisma.alert.count()).toBe(1);
     expect(await prisma.notificationPref.count()).toBe(1);
+
+    // Round trip: deploy 0002 again over the reverted, populated schema.
+    await applyMigration(prisma, '0002_schema_v1_1');
+    expect(await describeSchema(prisma, migrated.name)).toEqual(
+      await describeSchema(fresh.prisma, fresh.name),
+    );
+    const again = await prisma.$queryRaw<{ job: string; run_key: string; details: unknown }[]>`
+      SELECT job, run_key, details FROM job_runs ORDER BY job`;
+    expect(again).toEqual([
+      { job: 'rb-daily', run_key: '2026-04-01', details: {} },
+      { job: 'rb-hourly', run_key: '2026-04-01', details: {} },
+    ]);
+    const prefs = await prisma.notificationPref.findUniqueOrThrow({ where: { userId: 'rb-1' } });
+    expect([prefs.quietHoursStart, prefs.quietHoursEnd, prefs.dailyCap]).toEqual([22, 8, 5]);
   });
 });

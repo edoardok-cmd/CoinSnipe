@@ -15,7 +15,7 @@ Set `DATABASE_URL` (pooled, runtime) and `DIRECT_URL` (non-pooled, migrations); 
 | `pnpm -F @coinsnipe/db db:reset`    | `prisma migrate reset` then seed. Local databases only          |
 | `pnpm -F @coinsnipe/db db:seed`     | Upsert the 11 sectors and 20 narratives. Idempotent             |
 
-`db:migrate` and `db:deploy` do not run the seed; only `db:reset` does. See [Deploying](#deploying).
+`db:deploy` (`migrate deploy`) never runs the seed. `db:migrate` and `db:reset` run it only when they create or reset the database, so always run `db:seed` explicitly. See [Deploying](#deploying).
 
 Rules: every schema change is a new migration (`0003_...`, the next number); never edit an applied one. The current migrations are `0001_init` (schema v1) and `0002_schema_v1_1`. The seed writes reference data only: no price, score or sample data ever goes into a real database.
 
@@ -26,15 +26,16 @@ Tests: `schema.test.ts` and `load-env.test.ts` always run. `database.test.ts` ne
 Per environment (local, preview, production), in this order:
 
 1. `pnpm -F @coinsnipe/db db:deploy` (`prisma migrate deploy`, using `DIRECT_URL`).
-2. `pnpm -F @coinsnipe/db db:seed`, in **every environment**, once after the first deploy and safe to repeat. The sector and narrative rows are not created by any migration, and `assets.sector_id` is a NOT NULL foreign key to `sectors`, so the first asset insert (CSN-020) fails on an unseeded database. `migrate dev` and `migrate deploy` do not run the seed.
+2. `pnpm -F @coinsnipe/db db:seed`, in **every environment**, once after the first deploy and safe to repeat. The sector and narrative rows are not created by any migration, and `assets.sector_id` is a NOT NULL foreign key to `sectors`, so the first asset insert (CSN-020) fails on an unseeded database. `migrate deploy` never runs the seed, and `migrate dev` and `migrate reset` run it only when they create or reset the database; do not rely on that.
 3. Check: `prisma migrate status` reports up to date; `sectors` has 11 rows and `narratives` 20.
 
-**For CSN-073**: the deploy pipeline and the restore drill run `db:deploy` and then `db:seed`, in that order, in every environment. A database restored from a backup taken before the first seed, a fresh Neon branch, and `migrate reset` all come back without sectors until `db:seed` runs.
+**For CSN-073**: the deploy pipeline and the restore drill run `db:deploy` and then `db:seed`, in that order, in every environment. A database restored from a backup taken before the first seed, and a fresh Neon branch, come back without sectors until `db:seed` runs.
 
 Recovering from a bad migration (Prisma has no down migrations):
 
 - A migration that fails to apply changes nothing (each file runs as one transaction). Fix the cause, run `prisma migrate resolve --rolled-back <name>`, deploy again.
-- A migration that applied but must be undone: prefer rolling forward with the next numbered migration. For `0002_schema_v1_1` the exact reverse SQL is in its header, is tested against a populated schema, and lists what it discards; take a dump of the affected tables first, then delete the migration's row from `_prisma_migrations`.
+- Apply a migration that alters existing tables while writers are quiet or stopped (worker paused, no app traffic). Start such a migration with `SET LOCAL lock_timeout = '5s';` (0002 does): it then fails cleanly and applies nothing if a lock is not available in time, and you rerun it. Waiting is not the only risk: an application transaction that touches `users` and then an altered table can deadlock with the migration; Postgres aborts one side, and if it picks the migration the file rolls back whole.
+- A migration that applied but must be undone: prefer rolling forward with the next numbered migration. For `0002_schema_v1_1` the exact reverse SQL is in its header (its last statement removes the migration from `_prisma_migrations`), is tested against a populated schema and followed by a re-deploy, and lists what it discards. It does not restore the original `job_runs` status text, which is lost after a revert: take a dump of the affected tables first.
 - On Neon, point-in-time restore to a branch taken before the deploy is the alternative; deploy the app version that matches the restored schema, and run `db:seed` if the restore point predates the first seed.
 - Expand then contract: add the new nullable column, backfill, switch the code, and only then make it NOT NULL or drop the old one, each as its own migration when the table is large or an old app version is still running. Backfills on non-empty tables must be safe under concurrent writes; say how in the migration header.
 - Never run `migrate reset` against a database that holds real user or billing rows.
@@ -56,8 +57,13 @@ Recovering from a bad migration (Prisma has no down migrations):
 - **For CSN-050 (accounts)**: `accounts` has `access_token`, `refresh_token` and `id_token` columns only because `@auth/prisma-adapter` writes them. CoinSnipe signs users in and never calls the provider afterwards, so drop all three in your `linkAccount` wrapper and store none. The columns stay (the adapter expects them).
 - **For CSN-058 (learn content)**: `lessons` has nullable `unit` (unit slug or title, for example `basics`), `reviewed_by` and `reviewed_at`; `estimated_minutes` holds the minutes and glossary terms used stay in `body`. `quick_checks.options` stays an array of answer texts; `option_explanations` is a nullable array of the same length with one explanation per answer (the existing `explanation` is the overall one). Nothing else in `packages/db` needs a migration for content.
 - **For CSN-060 (notifications)**: delivery state lives in `notification_deliveries`; quiet hours and the daily cap in `notification_prefs`; the last fire time in `alerts.last_fired_at`.
-  - Idempotency: insert with `ON CONFLICT (user_id, channel, dedupe_key) DO NOTHING` and send only when a row was inserted. Keys: `signal:<signals.id>`, `alert:<alerts.id>:<UTC hour, YYYY-MM-DDTHH>` (so the hourly SG12 job fires an alert at most once an hour), `digest:<ISO week>`, `briefing:<ISO week>`.
-  - Daily cap: count rows of the user with `kind` in (`signal`, `alert`), `status = 'sent'` and `sent_at` inside the user's local day (`notification_prefs.timezone`, null means UTC); over the cap, store `status = 'batched'`. Quiet hours (default 22 to 8, local hours, wraps midnight, equal start and end means none): store `status = 'pending'` until they end.
+  - Keys: `signal:<signals.id>`, `alert:<alerts.id>:<UTC hour, YYYY-MM-DDTHH>` (so the hourly SG12 job fires an alert at most once an hour), `digest:<ISO week>`, `briefing:<ISO week>`.
+  - Delivery protocol, one database transaction per user and delivery (`database.test.ts` runs this recipe against real Postgres):
+    1. Take a per-user lock first: `SELECT pg_advisory_xact_lock(hashtextextended('notify:' || <user_id>, 0))`, or `SELECT 1 FROM notification_prefs WHERE user_id = <user_id> FOR UPDATE`. (With Prisma use `$executeRaw` for the advisory lock; `$queryRaw` cannot read its void result.) Without it two jobs running at once (realtime after signals, and the hourly SG12 run) can each count 4 sent rows and each send, ending above the cap.
+    2. Claim the row: `INSERT INTO notification_deliveries (...) VALUES (..., 'pending') ON CONFLICT (user_id, channel, dedupe_key) DO UPDATE SET signal_id = COALESCE(EXCLUDED.signal_id, notification_deliveries.signal_id) WHERE notification_deliveries.status IN ('pending', 'failed') RETURNING id`. No row returned means the delivery is already sent or batched: skip. A new key inserts as `pending`; a `pending` row held for quiet hours and a `failed` row are claimed by the same statement, so a retry or the quiet-hours release works. The claimed row stays locked until commit, so a concurrent claimer waits and then gets no row.
+    3. Daily cap: count rows of the user with `kind` in (`signal`, `alert`), `status = 'sent'` and `sent_at` inside the user's local day (`notification_prefs.timezone`, null means UTC). At or over `daily_cap`, set the claimed row to `batched`. Otherwise send, set `sent` with `sent_at = now()` (or `failed`), and commit.
+    4. A crash before commit rolls the transaction back: the row is absent or still `pending` or `failed`, so the next run claims it again. A crash after the provider accepted the message but before commit can send it again, so delivery is at least once.
+    5. Quiet hours (default 22 to 8, local hours, wraps midnight, equal start and end means none): commit the row as `pending` instead of sending; the release job claims it with the statement above.
   - The weekly digest leaves out signals already pushed by joining on `signal_id`.
 
 ## Tables

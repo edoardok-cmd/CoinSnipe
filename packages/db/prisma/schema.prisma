@@ -950,8 +950,12 @@ model PushSubscription {
 }
 
 // Delivery log and idempotency record for notifications (CSN-060). One row per
-// (user, channel, dedupe_key); the writer inserts with ON CONFLICT DO NOTHING and sends only
-// when a row was inserted, so a re-run of the same job in the same slot cannot send twice.
+// (user, channel, dedupe_key). The writer claims a row with INSERT ... ON CONFLICT (user_id,
+// channel, dedupe_key) DO UPDATE ... WHERE status IN ('pending', 'failed') RETURNING id inside
+// one transaction that also sends and marks the row, and skips when no row comes back, so a
+// re-run in the same slot cannot send twice and a pending or failed row can be retried. Take
+// a per-user advisory lock (or FOR UPDATE on the user's notification_prefs row) around the
+// daily-cap count and the claim. Full recipe: README, "For CSN-060".
 // dedupe_key convention: 'signal:<signals.id>' for a signal, 'alert:<alerts.id>:<UTC hour>'
 // for an alert rule (for example 'alert:42:2026-10-24T13', so the hourly SG12 job fires at
 // most once per hour), 'digest:<ISO week>' and 'briefing:<ISO week>' for the weekly mails.

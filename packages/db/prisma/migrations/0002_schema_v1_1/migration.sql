@@ -19,13 +19,24 @@
 --
 -- Safety (lock and backfill strategy)
 --   * Prisma runs this file as one multi-statement query, that is one transaction: it
---     applies completely or not at all. ALTER TABLE takes ACCESS EXCLUSIVE on its table
---     and holds it until commit, so no writer can interleave between the nullable add, the
---     backfill and the SET NOT NULL below: concurrent writers wait for the commit. That is
---     what makes the single set-based UPDATEs safe under concurrent writes; they are not
---     batched because the tables are small (job_runs: tens of rows per day;
---     notification_prefs: one row per user) and batching inside one transaction would not
---     shorten the lock.
+--     applies completely or not at all. The first statement is SET LOCAL lock_timeout =
+--     '5s': if any lock cannot be had within 5 seconds the statement fails, the whole file
+--     rolls back (nothing is applied; database.test.ts checks this with a held lock) and
+--     the deploy is simply retried.
+--   * Apply 0002 while writers are quiet or stopped (worker paused, no app traffic).
+--     ALTER TABLE takes ACCESS EXCLUSIVE on its table and holds it until commit, so no
+--     writer can interleave between the nullable add, the backfill and the SET NOT NULL
+--     below, which is what makes the single set-based UPDATEs safe under concurrent
+--     writes; they are not batched because the tables are small (job_runs: tens of rows
+--     per day; notification_prefs: one row per user) and batching inside one transaction
+--     would not shorten the lock. Writers are not only made to wait, though: an
+--     application transaction that touches users (or signals) and then one of the altered
+--     tables, for example a settings save that updates a user and then notification_prefs,
+--     can deadlock with this file, because the file later needs SHARE ROW EXCLUSIVE on
+--     users and signals for the new foreign keys. Measured in review with 8 concurrent
+--     writers: 16 application transactions aborted with "deadlock detected". Postgres
+--     aborts one side; if it picks the migration, the file rolls back whole. A
+--     lock_timeout or deadlock failure is safe: nothing is applied, rerun when quiet.
 --   * New NOT NULL columns on existing tables (job_runs.run_key, job_runs.details,
 --     notification_prefs.quiet_hours_start / quiet_hours_end / daily_cap) use the 3-step
 --     pattern: nullable add, backfill, SET DEFAULT and SET NOT NULL.
@@ -42,26 +53,27 @@
 --     over job_runs and notification_prefs for the backfill and the CHECK validation.
 --     Measured on local Postgres 16 with 100,000 notification_prefs rows, 50,000 job_runs
 --     rows, 20,000 alerts and 20 lessons: the whole file applied in 2.0 s. Writers to those
---     tables (the worker, preference saves) wait that long at worst, which is acceptable;
---     the estimate grows roughly linearly with rows.
+--     tables (the worker, preference saves) wait that long at worst when no deadlock
+--     occurs (see above); the estimate grows roughly linearly with rows.
 --   * Old writers: nothing writes job_runs yet (CSN-027 is the first writer and ships with
 --     run_key), so there is no deployed writer to break on the new NOT NULL run_key.
 --   * Run with DIRECT_URL (non-pooled connection), not the pooled DATABASE_URL.
 --
 -- Per-environment seed (F3). The sector and narrative reference rows are NOT created by
--- any migration, and `prisma migrate dev` / `prisma migrate deploy` do not run the seed.
+-- any migration. `prisma migrate deploy` never runs the seed; `prisma migrate dev` and
+-- `prisma migrate reset` run it only when they create or reset the database.
 -- assets.sector_id is a NOT NULL foreign key to sectors, so an environment whose sectors
 -- table is empty cannot accept the first asset (CSN-020 universe load). Run
--- `pnpm -F @coinsnipe/db db:seed` once in every environment (local, preview, production)
--- after `prisma migrate deploy`; it is idempotent. CSN-073 (production operations) must
+-- `pnpm -F @coinsnipe/db db:seed` explicitly in every environment (local, preview,
+-- production) after `prisma migrate deploy`; it is idempotent. CSN-073 (production operations) must
 -- run db:seed right after migrate deploy in the deploy pipeline and in the restore drill.
 --
 -- Rollback (Prisma has no down migrations)
 --   * 0002 failed to apply: it is one transaction, so nothing changed. Fix the cause, run
 --     `prisma migrate resolve --rolled-back 0002_schema_v1_1`, then deploy again.
 --   * 0002 applied, new tables and columns still empty or unused: run the reverse SQL
---     below, then delete the migration's row from the migration history table
---     (DELETE FROM "_prisma_migrations" WHERE "migration_name" = '0002_schema_v1_1').
+--     below in one transaction; its last statement deletes the migration's row from the
+--     migration history table, so a later deploy applies 0002 again.
 --   * 0002 applied and data exists in the new objects (job_runs hourly slots,
 --     notification_deliveries, quiet hours and caps users chose, lesson and quick-check
 --     content): prefer rolling forward with a new 0003 migration. If a revert is
@@ -73,13 +85,19 @@
 --     content is recoverable by re-running seedContent (CSN-058) from the files in git. On
 --     Neon the alternative is point-in-time restore to a branch taken before the deploy;
 --     the app version that matches the restored schema must be deployed with it.
+--     The reverse SQL does NOT undo the job_runs status normalisation and drops
+--     details.legacy_status with the details column: after a revert, rows that were
+--     normalised stay success, running or failed and their original status text is lost.
+--     That is why the dump comes first.
 --   * Reference data caveat: 0002 neither writes nor deletes sectors and narratives, so
 --     the reverse SQL leaves them in place. Anything that recreates the database instead
 --     (migrate reset on a dev database, a fresh Neon branch, a restore taken before the
 --     first seed) loses them: run db:seed again afterwards. Never run migrate reset on a
 --     database that holds real user or billing rows.
---   The reverse SQL (run in one transaction; executed by database.test.ts against a
---   populated scratch schema, so it is checked, not just written):
+--   The reverse SQL (run it in one transaction, for example psql -1 -f on the extracted
+--   lines; database.test.ts extracts exactly these lines and runs them as one
+--   transaction against a populated scratch schema, then re-applies 0002, so it is
+--   checked, not just written):
 -- >>> ROLLBACK-SQL
 -- | DROP TABLE "notification_deliveries";
 -- | ALTER TABLE "quick_checks" DROP CONSTRAINT "quick_checks_option_explanations_check";
@@ -94,8 +112,11 @@
 -- | ALTER TABLE "job_runs" DROP COLUMN "run_key", DROP COLUMN "details";
 -- | CREATE INDEX "events_calendar_asset_id_date_idx" ON "events_calendar"("asset_id", "date");
 -- | CREATE INDEX "key_levels_asset_id_date_idx" ON "key_levels"("asset_id", "date");
+-- | DELETE FROM "_prisma_migrations" WHERE "migration_name" = '0002_schema_v1_1';
 -- <<< ROLLBACK-SQL
 --
+SET LOCAL lock_timeout = '5s';
+
 -- S3: duplicate indexes. The unique indexes events_calendar_asset_id_date_kind_title_key
 -- and key_levels_asset_id_date_kind_low_high_key lead with (asset_id, date).
 -- DropIndex
