@@ -6,6 +6,7 @@ import { Faq } from '../components/marketing/Faq';
 import { Finale } from '../components/marketing/Finale';
 import { Footer } from '../components/marketing/Footer';
 import { Hero } from '../components/marketing/Hero';
+import { MobileStickyCta, pillVisible } from '../components/marketing/MobileStickyCta';
 import { activeIndex, spyLine } from '../components/marketing/Nav';
 import { Nav } from '../components/marketing/Nav';
 import { Pillars } from '../components/marketing/Pillars';
@@ -82,8 +83,28 @@ describe('marketing components render', () => {
     for (const col of ['Product', 'Company', 'Resources', 'Legal']) expect(footer).toContain(col);
   });
 
-  it('SampleBadge renders the label outside production', () => {
-    expect(html(SampleBadge)).toContain('Sample data');
+  it('SampleBadge renders the label outside production, inside a landmark', () => {
+    const out = html(SampleBadge);
+    expect(out).toContain('Sample data');
+    expect(out).toMatch(/^<aside [^>]*aria-label="[^"]+"/);
+  });
+
+  it('MobileStickyCta: server render is hidden, labelled from the content layer, links to the final CTA', () => {
+    const out = html(MobileStickyCta);
+    expect(out).toContain('class="sticky-cta"');
+    expect(out).toContain('data-show="false"'); // never visible before the hero has scrolled away
+    expect(out).toContain('href="#quiz"');
+    expect(out).toContain('>Start for free<');
+    expect(out).toContain('aria-label="Get started"');
+  });
+});
+
+describe('sticky pill rule', () => {
+  it('shows only after the hero is gone and never while the final CTA is on screen', () => {
+    expect(pillVisible(false, false)).toBe(false); // hero still in view
+    expect(pillVisible(true, false)).toBe(true); // hero gone
+    expect(pillVisible(true, true)).toBe(false); // final CTA on screen
+    expect(pillVisible(false, true)).toBe(false);
   });
 });
 

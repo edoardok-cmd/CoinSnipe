@@ -35,6 +35,14 @@
   --cs-pill: 999px;
   --cs-btn-h: 52px;
   --cs-nav-offset: 96px;
+  /* Opacity of a story step that is not the current one. Text at this opacity must still clear
+     WCAG AA 4.5:1 on the page background: the muted paragraph (#93a8a3) is the tightest case and
+     needs >= 0.72, so 0.78 leaves margin. Pinned by e2e/marketing-a11y.spec.ts (measured). */
+  --cs-step-dim: 0.78;
+  /* Glass bars (nav): top and bottom stop of the dark layer. Text on them must clear 4.5:1 over
+     the lightest thing the bar can float above (the mint final CTA), see the a11y spec. */
+  --cs-glass-top: rgba(14, 20, 19, 0.86);
+  --cs-glass-bot: rgba(6, 10, 9, 0.8);
 }
 
 @theme inline {
@@ -103,6 +111,10 @@ html {
   outline: 2px solid var(--cs-mint);
   outline-offset: 3px;
   border-radius: 8px;
+}
+/* A mint ring on the mint final CTA would be invisible (1.1:1); use the ink colour there. */
+.cs .finale :focus-visible {
+  outline-color: #02100b;
 }
 .cs .wrap {
   max-width: 1200px;
@@ -249,7 +261,7 @@ html {
   height: 66px;
   padding: 0 10px 0 18px;
   border-radius: 20px;
-  background: linear-gradient(180deg, rgba(14, 20, 19, 0.72), rgba(6, 10, 9, 0.6));
+  background: linear-gradient(180deg, var(--cs-glass-top), var(--cs-glass-bot));
   backdrop-filter: blur(22px) saturate(115%);
   -webkit-backdrop-filter: blur(22px) saturate(115%);
   border: 1px solid rgba(255, 255, 255, 0.09);
@@ -581,12 +593,13 @@ html {
   justify-content: center;
   gap: clamp(14px, 3vw, 36px);
   margin: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
+  /* Visible, never a scroller: a scroller cut the last tabs off and clipped their focus ring. */
+  overflow: visible;
   position: relative;
   z-index: 1;
 }
 .cs .tab {
+  border-radius: 0; /* keeps the selected underline straight when the focus rule rounds the ring */
   display: inline-flex;
   align-items: center;
   gap: 9px;
@@ -872,7 +885,31 @@ html {
     display: none;
   }
 }
+/* Four tabs (one with a tag) need about 600px; below 720px they wrap to a second row. */
+@media (max-width: 720px) {
+  .cs .tabs {
+    flex-wrap: wrap;
+    justify-content: center;
+    column-gap: 18px;
+  }
+}
+/* On a phone the icons go (they are decorative) so three tabs share the first row and the
+   Portfolio tab with its tag takes the second, instead of one tab per row. */
+@media (max-width: 480px) {
+  .cs .tabs {
+    column-gap: 16px;
+  }
+  .cs .tab svg {
+    display: none;
+  }
+}
 @media (max-width: 900px) {
+  .cs .why.only-m {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
   .cs .lhead {
     display: none;
   }
@@ -886,9 +923,6 @@ html {
   .cs .lrow .rr svg {
     width: 64px;
     height: 26px;
-  }
-  .cs .tabs {
-    justify-content: flex-start;
   }
   .cs .h-m,
   .cs .lrow .h-m {
@@ -958,7 +992,7 @@ html {
 }
 .cs .alert.a2 {
   left: -6%;
-  top: 80%;
+  top: 84%; /* was 80%: touched or overlapped alert a1 (70%) when the radar is narrower than 380px */
 }
 .cs .alert.a3 {
   left: -4%;
@@ -1021,7 +1055,7 @@ html {
   }
   .cs .alert.a2 {
     left: 0;
-    top: 80%;
+    top: 84%;
   }
   .cs .alert.a3 {
     left: 0;
@@ -1261,7 +1295,8 @@ html {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 28px;
+  /* 22px + the 24px hit area = 46px, inside the card's 48px/50px bottom padding (no overlap with the slide) */
+  bottom: 22px;
   display: flex;
   justify-content: center;
   gap: 4px;
@@ -1331,7 +1366,7 @@ html {
   flex-direction: column;
   justify-content: center;
   padding: 40px 0;
-  opacity: 0.3;
+  opacity: var(--cs-step-dim);
   transition: opacity 0.5s ease;
 }
 .cs .step[data-on='true'] {
@@ -1408,6 +1443,7 @@ html {
   gap: 22px;
 }
 .cs .ntab {
+  border-radius: 0;
   flex: none;
   height: 44px;
   padding: 0 2px;
@@ -1581,6 +1617,24 @@ html {
   line-height: 1.3;
   color: rgba(255, 255, 255, 0.6);
 }
+@media (max-width: 520px) {
+  /* 306px of card: the two values keep their natural width, the coin takes the rest, and the
+     one-line reason may wrap to two lines instead of running under the values. */
+  .cs .gem {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 10px;
+  }
+  .cs .gem .kv:nth-child(2),
+  .cs .gem .kv:last-child {
+    min-width: 0;
+  }
+  .cs .gem .why {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+}
 @media (prefers-reduced-motion: no-preference) {
   .cs .feed-track {
     animation: cs-feed 21s cubic-bezier(0.4, 0, 0.2, 1) infinite;
@@ -1659,9 +1713,10 @@ html {
     display: block;
     margin-top: 72px;
   }
-  .cs .step {
+  .cs .step,
+  .cs .step.r2 {
     min-height: 0;
-    padding: 40px 0 20px;
+    padding: 40px 0 20px; /* r2 kept padding-bottom: 0, which left its link flush against the card below */
     opacity: 1;
   }
   .cs .sv {
@@ -1899,6 +1954,47 @@ html {
   }
 }
 
+/* ------------------------------------------------------------------ sticky "Start for free" pill (mobile layout)
+   Flow map: "Same page at 390px, burger nav, plus a sticky Start for free pill at the bottom once the
+   hero scrolls away." It exists exactly where the burger exists (max-width 980px, same query as the
+   nav), shows once the hero is out of view and hides again while the final CTA is on screen
+   (components/marketing/MobileStickyCta.tsx sets data-show). Hidden = visibility:hidden, so it is
+   out of the tab order and the accessibility tree until shown. */
+.cs .sticky-cta {
+  display: none;
+}
+@media (max-width: 980px) {
+  .cs .sticky-cta {
+    display: block;
+    position: fixed;
+    left: 50%;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    z-index: 60;
+    translate: -50% calc(100% + 32px);
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      translate 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
+      opacity 0.25s ease,
+      visibility 0s linear 0.35s;
+  }
+  .cs .sticky-cta[data-show='true'] {
+    translate: -50% 0;
+    opacity: 1;
+    visibility: visible;
+    transition-delay: 0s;
+  }
+  /* A control scrolled into view by Tab must land above the pill, not under it
+     (pill 52px + 16px from the bottom + 20px of air). */
+  html {
+    scroll-padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  }
+  /* The last footer line must be able to scroll clear of the pill. */
+  .cs footer {
+    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 /* ------------------------------------------------------------------ sample badge */
 .cs .sample-badge {
   position: fixed;
@@ -1913,6 +2009,12 @@ html {
   background: rgba(20, 12, 0, 0.88);
   border: 1px solid rgba(255, 190, 90, 0.5);
   pointer-events: none;
+}
+@media (max-width: 980px) {
+  /* keep clear of the sticky pill (52px tall, 16px from the bottom) */
+  .cs .sample-badge {
+    bottom: calc(16px + 52px + 12px + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

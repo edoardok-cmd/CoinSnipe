@@ -302,9 +302,9 @@ function Radar() {
         <span className="tag-s" style={{ fontSize: 12, padding: '4px 10px' }}>
           {r.tag}
         </span>
-        <h3 style={{ fontSize: 'clamp(28px,3vw,38px)', marginTop: 14, lineHeight: 1.1 }}>
+        <h2 style={{ fontSize: 'clamp(28px,3vw,38px)', marginTop: 14, lineHeight: 1.1 }}>
           {r.title}
-        </h3>
+        </h2>
         <p style={{ marginTop: 14, fontSize: 17, color: 'var(--cs-muted)', lineHeight: 1.6 }}>
           {r.body}
         </p>

@@ -3,6 +3,7 @@ import { DM_Sans, Urbanist } from 'next/font/google';
 import type { ReactNode } from 'react';
 import { siteMeta } from '../../content/marketing';
 import { Footer } from '../../components/marketing/Footer';
+import { MobileStickyCta } from '../../components/marketing/MobileStickyCta';
 import { Nav } from '../../components/marketing/Nav';
 import { SampleBadge } from '../../components/marketing/SampleBadge';
 
@@ -35,6 +36,8 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
       <Nav />
       {children}
       <Footer />
+      {/* Last in DOM order: a fixed pill at the bottom of the screen is last in the tab order too. */}
+      <MobileStickyCta />
       <SampleBadge />
     </div>
   );
