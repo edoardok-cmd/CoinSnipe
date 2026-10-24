@@ -9,9 +9,10 @@ import {
   safeParseModelConfig,
   statusOf,
 } from '../src/config/schema';
-import { MODEL_IDS, type MetricId } from '../src/types';
+import { MODEL_IDS, SCALED_MEASURE_KEYS, type MetricId } from '../src/types';
 import { loadGolden } from './oracle/golden';
 import { labCompatConfig } from './oracle/labCompat';
+import { labLevelACompatConfig } from './oracle/labLevelACompat';
 
 type Json = Record<string, unknown>;
 const raw = (): Json => JSON.parse(JSON.stringify(rawConfig)) as Json;
@@ -266,12 +267,19 @@ describe('config schema rejects bad input', () => {
 });
 
 describe('indicators and candles: contract until a consumer wires them (PENDING_CONFIG_KEYS)', () => {
+  // Keys a task has wired and removed from PENDING_CONFIG_KEYS, with the code that reads them.
+  // CSN-031: levelA/marketWeather.ts (macro scaling). `returns` is also read by CSN-035/036 later.
+  const WIRED = ['indicators.correlationDays', 'indicators.returns'];
+
   it('lists every indicators and candles key with the task that will read it', () => {
     const keys = [
       ...Object.keys(MODEL_CONFIG_V0_3.indicators).map((k) => `indicators.${k}`),
       ...Object.keys(MODEL_CONFIG_V0_3.candles).map((k) => `candles.${k}`),
-    ].sort();
+    ]
+      .filter((k) => !WIRED.includes(k))
+      .sort();
     expect(Object.keys(PENDING_CONFIG_KEYS).sort()).toEqual(keys);
+    for (const k of WIRED) expect(PENDING_CONFIG_KEYS).not.toHaveProperty(k);
     for (const task of Object.values(PENDING_CONFIG_KEYS)) expect(task).toMatch(/CSN-03[1-8]/);
   });
 
@@ -283,5 +291,190 @@ describe('indicators and candles: contract until a consumer wires them (PENDING_
     const ok = raw();
     at(ok, 'indicators').rsiWarmupBars = 57;
     expect(parseModelConfig(ok).indicators.rsiWarmupBars).toBe(57);
+  });
+});
+
+describe('Level A config (CSN-031): market weather A1-A10 and alt season C1-C3', () => {
+  const sum = (o: Record<string, number>, keys: string[]) => keys.reduce((s, k) => s + o[k]!, 0);
+  const A_IDS = ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9'];
+
+  it('market weights are the master-plan 5.1 table and add up to 100; A10 has none', () => {
+    const m = MODEL_CONFIG_V0_3.market;
+    expect(A_IDS.map((id) => m[id as 'A1'])).toEqual([20, 15, 10, 12, 8, 10, 5, 10, 10]);
+    expect(sum(m as unknown as Record<string, number>, A_IDS)).toBe(100);
+    expect(m).not.toHaveProperty('A10');
+    expect(statusOf(MODEL_CONFIG_V0_3, 'A10')).toBe('proposed');
+  });
+
+  it('cycle weights are the master-plan 5.2 table (50/25/25) and phases 65/35', () => {
+    const c = MODEL_CONFIG_V0_3.cycle;
+    expect([c.altIndex, c.dominance, c.ethBtc]).toEqual([50, 25, 25]);
+    expect([c.altSeason, c.btcSeason]).toEqual([65, 35]);
+    expect(['C1', 'C2', 'C3'].map((id) => statusOf(MODEL_CONFIG_V0_3, id))).toEqual([
+      'proposed',
+      'proposed',
+      'proposed',
+    ]);
+  });
+
+  it('the measure weights inside each input follow the plan where it states them', () => {
+    const p = MODEL_CONFIG_V0_3.levelA.market.parts;
+    expect(p.A1).toEqual({ btcVs200dma: 40, btcSlope50dma: 30, btcMaStack: 30 }); // 5.1 A1
+    expect(p.A8).toEqual({ globalM2Change3m: 60, globalM2ChangeYoY: 40 }); // 5.1 A8
+    expect(p.A9).toEqual({ regulationTone: 50, geopoliticalRisk: 50 }); // 5.1 A9
+    for (const id of A_IDS) {
+      const w = Object.values(p[id as 'A1']);
+      expect(
+        w.reduce((s, x) => s + x, 0),
+        id,
+      ).toBe(100);
+    }
+  });
+
+  it('holds the sub-score method, the A8 lag and the event window as config values', () => {
+    const l = MODEL_CONFIG_V0_3.levelA;
+    expect(l.subScore).toEqual({
+      method: 'zscore',
+      historyDays: 365,
+      minHistory: 10,
+      zClip: 2,
+      fixedScale: null,
+    });
+    expect(l.market.m2LagDays).toBe(70);
+    expect(l.market.events).toEqual({ windowDays: 7, largeUnlockPct: 1 });
+    expect(l.market.fundingInvertAbove).toBe(0.03);
+    expect(l.market.gprBaseline).toBe(100);
+    expect(l.market.trend).toEqual({ shortMa: 20, midMa: 50, longMa: 200, slopeDays: 14 });
+    expect(l.cycle).toMatchObject({ topN: 50, returnDays: 90, ethBtcDays: 30 });
+    expect(l.cycle.stablecoins).toEqual(expect.arrayContaining(['USDT', 'USDC', 'DAI']));
+    expect(MODEL_CONFIG_V0_3.indicators.correlationDays).toBe(90);
+    expect(MODEL_CONFIG_V0_3.market.corrFloor).toBe(0.3);
+  });
+
+  it('ships no Score Lab fixed-scale constant in the model config', () => {
+    expect(MODEL_CONFIG_V0_3.levelA.subScore.fixedScale).toBeNull();
+    expect(JSON.stringify(rawConfig)).not.toMatch(/"unit"/);
+  });
+
+  it('market weights that do not add up to 100 are rejected', () => {
+    rejects((c) => (at(c, 'market').A1 = 25), /market weights A1-A9 must add up to 100/);
+    rejects((c) => (at(c, 'market').A9 = 0), /market weights A1-A9 must add up to 100/);
+    const ok = raw();
+    at(ok, 'market').A1 = 30;
+    at(ok, 'market').A2 = 5;
+    expect(parseModelConfig(ok).market.A1).toBe(30);
+  });
+
+  it('cycle weights that do not add up to 100 are rejected', () => {
+    rejects((c) => (at(c, 'cycle').altIndex = 60), /cycle weights C1-C3 .* add up to 100/);
+    rejects((c) => (at(c, 'cycle').ethBtc = -25), /cycle\.ethBtc/);
+  });
+
+  it('phase and label thresholds out of order are rejected', () => {
+    rejects(
+      (c) => Object.assign(at(c, 'cycle'), { altSeason: 30, btcSeason: 70 }),
+      /btcSeason must be below altSeason/,
+    );
+    rejects(
+      (c) => Object.assign(at(c, 'market'), { tailwind: -30, headwind: 30 }),
+      /headwind must be below tailwind/,
+    );
+    rejects((c) => (at(c, 'cycle').altSeason = 101), /cycle\.altSeason/);
+  });
+
+  it('measure weights inside an input: negative, all-zero, unknown or missing keys are rejected', () => {
+    rejects((c) => (at(c, 'levelA.market.parts.A1').btcVs200dma = -1), /parts\.A1\.btcVs200dma/);
+    rejects((c) => {
+      const a3 = at(c, 'levelA.market.parts.A3');
+      a3.fundingRate = 0;
+      a3.openInterestChange30d = 0;
+      a3.fearGreed = 0;
+    }, /at least one weight/);
+    rejects((c) => (at(c, 'levelA.market.parts.A2').extra = 1), /Unrecognized key/);
+    rejects((c) => delete at(c, 'levelA.market.parts.A4').vix, /parts\.A4\.vix/);
+    rejects((c) => delete at(c, 'levelA.market.parts').A7, /parts\.A7/);
+  });
+
+  it('sub-score settings: method, history window, z clip', () => {
+    rejects((c) => (at(c, 'levelA.subScore').method = 'percentile'), /subScore\.method/);
+    rejects((c) => (at(c, 'levelA.subScore').zClip = 0), /subScore\.zClip/);
+    rejects((c) => (at(c, 'levelA.subScore').historyDays = 1), /subScore\.historyDays/);
+    rejects((c) => (at(c, 'levelA.subScore').minHistory = 1), /subScore\.minHistory/);
+    rejects(
+      (c) => (at(c, 'levelA.subScore').minHistory = 400),
+      /minHistory cannot exceed historyDays/,
+    );
+  });
+
+  it('method "fixedScale" needs a complete table with positive units', () => {
+    rejects((c) => (at(c, 'levelA.subScore').method = 'fixedScale'), /needs a fixedScale table/);
+    const table = () =>
+      Object.fromEntries(SCALED_MEASURE_KEYS.map((k) => [k, { centre: 0, unit: 1 }])) as Record<
+        string,
+        unknown
+      >;
+    rejects((c) => {
+      const s = at(c, 'levelA.subScore');
+      s.method = 'fixedScale';
+      const t = table();
+      delete t.vix;
+      s.fixedScale = t;
+    }, /needs an entry for vix/);
+    rejects((c) => {
+      const s = at(c, 'levelA.subScore');
+      s.method = 'fixedScale';
+      s.fixedScale = { ...table(), vix: { centre: 20, unit: 0 } };
+    }, /fixedScale\.vix\.unit/);
+    rejects((c) => {
+      at(c, 'levelA.subScore').fixedScale = { ...table(), btcMaStack: { centre: 0, unit: 1 } };
+    }, /btcMaStack/);
+    const ok = raw();
+    const s = at(ok, 'levelA.subScore');
+    s.method = 'fixedScale';
+    s.fixedScale = table();
+    expect(parseModelConfig(ok).levelA.subScore.method).toBe('fixedScale');
+  });
+
+  it('the Lab compatibility config validates (labLevelACompatConfig)', () => {
+    const cfg = labLevelACompatConfig();
+    expect(() => parseModelConfig(cfg)).not.toThrow();
+    expect(cfg.levelA.subScore.method).toBe('fixedScale');
+    expect(Object.keys(cfg.levelA.subScore.fixedScale!).sort()).toEqual(
+      [...SCALED_MEASURE_KEYS].sort(),
+    );
+  });
+
+  it('A1 windows, funding threshold, A8 lag, event window, alt-season windows and lists', () => {
+    rejects(
+      (c) => Object.assign(at(c, 'levelA.market.trend'), { shortMa: 60 }),
+      /shortMa < midMa < longMa/,
+    );
+    rejects((c) => (at(c, 'levelA.market.trend').slopeDays = 0), /trend\.slopeDays/);
+    rejects((c) => (at(c, 'levelA.market').fundingInvertAbove = -0.01), /fundingInvertAbove/);
+    rejects((c) => (at(c, 'levelA.market').m2LagDays = -1), /m2LagDays/);
+    rejects((c) => (at(c, 'levelA.market').m2LagDays = 70.5), /m2LagDays/);
+    rejects((c) => (at(c, 'levelA.market').corrMissing = 'zero'), /corrMissing/);
+    rejects((c) => (at(c, 'levelA.market.events').windowDays = -1), /events\.windowDays/);
+    rejects((c) => (at(c, 'levelA.market.events').largeUnlockPct = -1), /largeUnlockPct/);
+    rejects((c) => (at(c, 'levelA.cycle').topN = 0), /cycle\.topN/);
+    rejects((c) => (at(c, 'levelA.cycle').returnDays = 0), /cycle\.returnDays/);
+    rejects((c) => (at(c, 'levelA.cycle').ethBtcDays = 1.5), /cycle\.ethBtcDays/);
+    rejects(
+      (c) => (at(c, 'levelA.cycle').stablecoins = ['USDT', 'USDT']),
+      /duplicate stablecoin USDT/,
+    );
+    rejects((c) => (at(c, 'levelA').extra = 1), /Unrecognized key/);
+    rejects((c) => delete c.levelA, /levelA/);
+  });
+
+  it('a changed level A value parses and reaches the typed config', () => {
+    const c = raw();
+    at(c, 'levelA.market').m2LagDays = 63;
+    at(c, 'levelA.cycle').topN = 30;
+    at(c, 'levelA.market').corrMissing = 'floor';
+    const parsed = parseModelConfig(c);
+    expect(parsed.levelA.market.m2LagDays).toBe(63);
+    expect(parsed.levelA.cycle.topN).toBe(30);
+    expect(parsed.levelA.market.corrMissing).toBe('floor');
   });
 });

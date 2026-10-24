@@ -1,6 +1,6 @@
 {
   "model_version": "0.3",
-  "description": "CoinSnipe scoring model v0.3. Every weight and threshold is a model parameter copied from the Score Lab v0.3 DEFAULT_CONFIG (2026-10-23) and the master plan v0.3 (Oct 10, 2026); all are status proposed until the backtest (CSN-040) marks them agreed. Key names follow the Lab so a Lab 'Copy config' JSON maps 1:1 (cycle.dex is the list of gold tokens excluded from the alt-season index). Added in CSN-030: metricSpec, normalization, candles, indicators and status. Contains no market data.",
+  "description": "CoinSnipe scoring model v0.3. Every weight and threshold is a model parameter taken from the Score Lab v0.3 DEFAULT_CONFIG (2026-10-23) and the master plan v0.3 (Oct 10, 2026), except the weights inside the Level A inputs A3, A4, A6 and A7 (levelA.market.parts), which the plan does not give and which follow the Score Lab's formula coefficients pending a user decision (DISCREPANCIES.md); all are status proposed until the backtest (CSN-040) marks them agreed. Key names follow the Lab so a Lab 'Copy config' JSON maps 1:1 (cycle.dex is the list of gold tokens excluded from the alt-season index). Added in CSN-030: metricSpec, normalization, candles, indicators and status. Added in CSN-031: levelA (sub-score method, measure weights inside each Level A input, A1/A3/A8/A9/A10 parameters, alt-season windows). Contains no market data.",
   "quality": { "U": 30, "E": 20, "T": 20, "L": 10, "R": 20 },
   "timing": {
     "short": { "M": 60, "S": 40 },
@@ -76,6 +76,55 @@
     "altSeason": 65,
     "btcSeason": 35,
     "dex": ["PAXG", "XAUT"]
+  },
+  "levelA": {
+    "subScore": {
+      "method": "zscore",
+      "historyDays": 365,
+      "minHistory": 10,
+      "zClip": 2,
+      "fixedScale": null
+    },
+    "market": {
+      "parts": {
+        "A1": { "btcVs200dma": 40, "btcSlope50dma": 30, "btcMaStack": 30 },
+        "A2": { "stablecoinSupplyChange30d": 100 },
+        "A3": { "fundingRate": 30, "openInterestChange30d": 30, "fearGreed": 40 },
+        "A4": { "nasdaqVs50dma": 35, "spxVs50dma": 35, "vix": 30 },
+        "A5": { "btcDominanceChange30d": 100 },
+        "A6": { "dollarIndexChange30d": 60, "us10yChange30d": 40 },
+        "A7": { "wtiChange30d": 70, "goldChange30d": 30 },
+        "A8": { "globalM2Change3m": 60, "globalM2ChangeYoY": 40 },
+        "A9": { "regulationTone": 50, "geopoliticalRisk": 50 }
+      },
+      "trend": { "shortMa": 20, "midMa": 50, "longMa": 200, "slopeDays": 14 },
+      "fundingInvertAbove": 0.03,
+      "gprBaseline": 100,
+      "m2LagDays": 70,
+      "corrMissing": "none",
+      "events": { "windowDays": 7, "largeUnlockPct": 1 }
+    },
+    "cycle": {
+      "topN": 50,
+      "returnDays": 90,
+      "ethBtcDays": 30,
+      "stablecoins": [
+        "USDT",
+        "USDC",
+        "DAI",
+        "USDE",
+        "USDS",
+        "FDUSD",
+        "TUSD",
+        "PYUSD",
+        "USDD",
+        "FRAX",
+        "GUSD",
+        "USDP",
+        "LUSD",
+        "BUSD"
+      ]
+    }
   },
   "sector": {
     "B1": 30,

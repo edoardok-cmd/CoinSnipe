@@ -6,11 +6,8 @@
  * group must be non-negative, unknown keys are rejected everywhere, ordering and uniqueness
  * invariants are checked, and retired IDs (R3, S4) must stay present with weight 0.
  *
- * What reads the config today: only `metricSpec`, `normalization` and `absBlend` (normalize.ts).
- * Every other section is validated here and is read by the Level A/B/C code as CSN-031 to CSN-038
- * land. The `indicators` and `candles` sections, including the `indicators.variant` switch between
- * textbook and Score Lab indicators, are listed with their consuming task in
- * {@link PENDING_CONFIG_KEYS}; editing them changes no output until that task wires them.
+ * Which code reads which section is not listed here (it goes stale); see {@link PENDING_CONFIG_KEYS}
+ * for the `indicators` and `candles` keys that no code reads yet, and grep `config.` in `src/`.
  */
 import { z } from 'zod';
 import rawModelConfigV03 from './model-config.v0.3.json';
@@ -20,6 +17,7 @@ import {
   GROWTH_METRIC_IDS,
   HORIZONS,
   ID_STATUSES,
+  MARKET_MEASURES,
   MARKET_WEIGHT_IDS,
   METRIC_IDS,
   METRIC_PILLARS,
@@ -27,7 +25,9 @@ import {
   PEER_SCOPES,
   PROFILES,
   QUALITY_PILLARS,
+  SCALED_MEASURE_KEYS,
   SECTOR_IDS,
+  SUB_SCORE_METHODS,
   TIMING_PARTS,
   type MetricId,
 } from '../types';
@@ -47,6 +47,9 @@ const sumOf = (values: Iterable<number>): number => {
 const hasPositiveSum = (o: Record<string, number> | readonly number[]): boolean =>
   sumOf(Object.values(o)) > 0;
 const positiveSumMessage = { message: 'at least one weight in the group must be above 0' };
+
+/** Weights that must add up to 100 (the master-plan tables are points out of 100). */
+const sumsTo100 = (values: Iterable<number>): boolean => Math.abs(sumOf(values) - 100) < 1e-9;
 
 const weightShape = <K extends string>(ids: readonly K[]): Record<K, typeof weight> =>
   Object.fromEntries(ids.map((id) => [id, weight])) as Record<K, typeof weight>;
@@ -100,6 +103,9 @@ const uniqueList = <T extends z.ZodType<string>>(item: T, what: string) =>
  * `rsiPeriod`, `atrPeriod` and `adxPeriod` apply to both variants. `returns` and the `candles`
  * keys are independent of `variant`.
  *
+ * `indicators.returns` is already read by the Level A macro-scaling correlation (CSN-031) and so
+ * is not listed; CSN-035 (R1) and CSN-036 (beta in S1) will read it too.
+ *
  * A consuming task removes its keys from this map when it wires them (config.test.ts checks
  * that every `indicators` and `candles` key is either listed here or removed from the list on
  * purpose).
@@ -112,11 +118,9 @@ export const PENDING_CONFIG_KEYS: Readonly<Record<string, string>> = {
   'indicators.adxPeriod': 'CSN-036 (M6)',
   'indicators.bollingerPeriod': 'CSN-036 (H4)',
   'indicators.bollingerK': 'CSN-036 (H4)',
-  'indicators.returns': 'CSN-035 (R1) and CSN-036 (beta in S1)',
   'indicators.annualisationDays': 'CSN-035 (R1)',
   'indicators.volatilityDays': 'CSN-035 (R1)',
   'indicators.betaDays': 'CSN-036 (beta in S1)',
-  'indicators.correlationDays': 'CSN-031 (5.1 macro scaling: 90D BTC vs Nasdaq correlation)',
   'indicators.drawdownDays': 'CSN-035 (R2)',
   'indicators.pivotBars': 'CSN-033 (K1)',
   'indicators.upDownVolumeDays': 'CSN-036 (M7)',
@@ -126,6 +130,105 @@ export const PENDING_CONFIG_KEYS: Readonly<Record<string, string>> = {
   'candles.weeklyBars': 'CSN-036 (weekly RSI) and CSN-033 (K1 weekly pivots)',
   'candles.horizonCandleIds': "CSN-036 (which metrics use the horizon's candles; D-07)",
 };
+
+const measureWeights = <K extends string>(keys: readonly K[]) =>
+  z
+    .strictObject(weightShape(keys))
+    .refine((o) => hasPositiveSum(o as Record<string, number>), positiveSumMessage);
+
+const fixedScaleEntry = z.strictObject({
+  /** Neutral point: a value equal to `centre` scores 0. */
+  centre: z.number(),
+  /** The distance from `centre` that scores a full +-100 (alt season: on the signed scale too). */
+  unit: z.number().positive(),
+  /** A3 funding only: the unit above the crowded-leverage threshold, when it differs from `unit`. */
+  aboveUnit: z.number().positive().optional(),
+});
+
+/**
+ * Level A sub-score method (master plan 5.1: "clamped against its own 1-year history").
+ * `zscore` (default): (value - 1-year mean) / (zClip x 1-year standard deviation) x 100, clipped
+ * to +-100, which is the plan's "z-score clipped to +-2, scaled x50" when zClip is 2. `minmax`:
+ * the position between the 1-year minimum and maximum, mapped to -100..+100. `fixedScale`: the
+ * Score Lab's per-input constants (a neutral point and a unit), which need no history; the table
+ * is null by default, so the golden run supplies it (test/oracle/labLevelACompat.ts).
+ */
+const subScoreSchema = z
+  .strictObject({
+    method: z.enum(SUB_SCORE_METHODS),
+    historyDays: z.number().int().min(2),
+    minHistory: z.number().int().min(2),
+    zClip: z.number().positive(),
+    fixedScale: z.partialRecord(z.enum(SCALED_MEASURE_KEYS), fixedScaleEntry).nullable(),
+  })
+  .superRefine((s, ctx) => {
+    if (s.minHistory > s.historyDays)
+      ctx.addIssue({ code: 'custom', message: 'minHistory cannot exceed historyDays' });
+    if (s.method === 'fixedScale') {
+      if (!s.fixedScale)
+        ctx.addIssue({ code: 'custom', message: 'method "fixedScale" needs a fixedScale table' });
+      else
+        for (const key of SCALED_MEASURE_KEYS)
+          if (!s.fixedScale[key])
+            ctx.addIssue({
+              code: 'custom',
+              path: ['fixedScale', key],
+              message: `method "fixedScale" needs an entry for ${key}`,
+            });
+    }
+  });
+
+const levelASchema = z.strictObject({
+  subScore: subScoreSchema,
+  market: z.strictObject({
+    /** Weights of the measures inside each input (they are reweighted when one is missing). */
+    parts: z.strictObject({
+      A1: measureWeights(MARKET_MEASURES.A1),
+      A2: measureWeights(MARKET_MEASURES.A2),
+      A3: measureWeights(MARKET_MEASURES.A3),
+      A4: measureWeights(MARKET_MEASURES.A4),
+      A5: measureWeights(MARKET_MEASURES.A5),
+      A6: measureWeights(MARKET_MEASURES.A6),
+      A7: measureWeights(MARKET_MEASURES.A7),
+      A8: measureWeights(MARKET_MEASURES.A8),
+      A9: measureWeights(MARKET_MEASURES.A9),
+    }),
+    /** A1 windows in days: the three averages of the stack, and the slope span of the middle one. */
+    trend: z
+      .strictObject({
+        shortMa: positiveInt,
+        midMa: positiveInt,
+        longMa: positiveInt,
+        slopeDays: positiveInt,
+      })
+      .refine((t) => t.shortMa < t.midMa && t.midMa < t.longMa, {
+        message: 'trend averages must satisfy shortMa < midMa < longMa',
+      }),
+    /** A3: funding per 8 hours, in percent, above which a higher rate scores lower. */
+    fundingInvertAbove: nonNegative,
+    /** A9: the GPR index level that counts as no extra geopolitical risk. */
+    gprBaseline: z.number(),
+    /** A8: days between the M2 observation used and asOf. */
+    m2LagDays: z.number().int().nonnegative(),
+    /** Macro scaling when no BTC-Nasdaq correlation is available: keep plan weights, or use the floor. */
+    corrMissing: z.enum(['none', 'floor']),
+    /** A10: days ahead of asOf that count, and the unlock size (percent of supply) that counts as large. */
+    events: z.strictObject({
+      windowDays: z.number().int().nonnegative(),
+      largeUnlockPct: nonNegative,
+    }),
+  }),
+  cycle: z.strictObject({
+    /** C1: how many of the largest alts are compared with Bitcoin. */
+    topN: positiveInt,
+    /** C1: the return window in days. */
+    returnDays: positiveInt,
+    /** C3: the ETH/BTC change window in days. */
+    ethBtcDays: positiveInt,
+    /** C1: stablecoin symbols left out of the top alts (the data layer can also flag them). */
+    stablecoins: uniqueList(z.string().min(1), 'stablecoin'),
+  }),
+});
 
 export const modelConfigSchema = z
   .strictObject({
@@ -162,7 +265,9 @@ export const modelConfigSchema = z
         tailwind: z.number(),
         headwind: z.number(),
       })
-      .refine((m) => sumOf(MARKET_WEIGHT_IDS.map((id) => m[id])) > 0, positiveSumMessage)
+      .refine((m) => sumsTo100(MARKET_WEIGHT_IDS.map((id) => m[id])), {
+        message: 'market weights A1-A9 must add up to 100',
+      })
       .refine((m) => m.headwind < m.tailwind, { message: 'headwind must be below tailwind' }),
     cycle: z
       .strictObject({
@@ -173,8 +278,16 @@ export const modelConfigSchema = z
         btcSeason: score100,
         dex: z.array(z.string().min(1)),
       })
-      .refine((c) => c.altIndex + c.dominance + c.ethBtc > 0, positiveSumMessage)
+      .refine((c) => sumsTo100([c.altIndex, c.dominance, c.ethBtc]), {
+        message: 'cycle weights C1-C3 (altIndex, dominance, ethBtc) must add up to 100',
+      })
       .refine((c) => c.btcSeason < c.altSeason, { message: 'btcSeason must be below altSeason' }),
+    /**
+     * Level A parameters that the master plan leaves open or that the Lab hard-codes (CSN-031).
+     * `market` and `cycle` above stay identical to the Lab's keys; everything the engine added
+     * lives here. See DISCREPANCIES.md D-08 to D-13.
+     */
+    levelA: levelASchema,
     sector: z
       .strictObject({
         ...weightShape(SECTOR_IDS),
