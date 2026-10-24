@@ -7,9 +7,9 @@
 --     details jsonb, status vocabulary running | success | failed (CHECK). Unique key moves
 --     from (job, run_date) to (job, run_key) so hourly jobs get one row per hour.
 --   * Notification delivery state (F2): notification_deliveries (delivery log and
---     idempotency record, also the source of the per-user daily cap count),
---     notification_prefs.quiet_hours_start / quiet_hours_end / daily_cap,
---     alerts.last_fired_at.
+--     idempotency record, also the source of the per-user daily cap count, with a small
+--     partial index on its pending and failed rows), notification_prefs.quiet_hours_start /
+--     quiet_hours_end / daily_cap, alerts.last_fired_at.
 --   * S3: drop the duplicate (asset_id, date) indexes on events_calendar and key_levels; the
 --     unique indexes on the same tables lead with (asset_id, date) and serve those reads.
 --   * S4: additive nullable columns lessons.unit / reviewed_by / reviewed_at and
@@ -240,6 +240,10 @@ ALTER TABLE "notification_deliveries" ADD CONSTRAINT "notification_deliveries_si
 
 -- AddForeignKey
 ALTER TABLE "notification_deliveries" ADD CONSTRAINT "notification_deliveries_alert_id_fkey" FOREIGN KEY ("alert_id") REFERENCES "alerts"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- The release and retry sweep looks for pending and failed rows across users. A partial
+-- index keeps that cheap (it holds only the open rows) and Prisma cannot express it.
+CREATE INDEX "notification_deliveries_open_idx" ON "notification_deliveries"("status") WHERE "status" IN ('pending', 'failed');
 
 -- Vocabulary checks. sent_at is set exactly when the status is sent.
 ALTER TABLE "notification_deliveries" ADD CONSTRAINT "notification_deliveries_kind_check" CHECK ("kind" IN ('signal', 'alert', 'digest', 'briefing'));

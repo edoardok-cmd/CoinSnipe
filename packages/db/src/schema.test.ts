@@ -559,4 +559,99 @@ describe('lock safety, seed wording and rollback honesty in 0002 (review fixes)'
     expect(flat).not.toMatch(/deploy is simply retried|rerun when quiet/);
     expect(readme).not.toMatch(/and you rerun it/);
   });
+
+  it('pins the partial index on open delivery rows, and a partial index never satisfies a rule', () => {
+    const open = finalSchema.indexes.find(
+      (index) => index.name === 'notification_deliveries_open_idx',
+    );
+    expect(open).toMatchObject({
+      table: 'notification_deliveries',
+      columns: ['status'],
+      partial: true,
+      unique: false,
+    });
+    expect(migration0002).toMatch(
+      /CREATE INDEX "notification_deliveries_open_idx" ON "notification_deliveries"\("status"\) WHERE "status" IN \('pending', 'failed'\);/,
+    );
+    // Consistency of the index rules: a partial index is not a whole-table index.
+    const onlyPartialUserIndex = {
+      tables: new Map([['t', new Set(['user_id'])]]),
+      indexes: [
+        {
+          name: 'p',
+          table: 't',
+          columns: ['user_id'],
+          unique: false,
+          partial: true,
+          method: 'btree',
+        },
+      ],
+      foreignKeys: [],
+    };
+    expect(indexRuleViolations(onlyPartialUserIndex)).toEqual(['t: no index leads with (user_id)']);
+    // And the index is hand-written: the rollback drops it with its table (DROP TABLE).
+    expect(migration0002).toMatch(/-- \| DROP TABLE "notification_deliveries";/);
+  });
+
+  it('CSN-060 contract: distinct-notification cap, prefs defaults, batched rule, retention', () => {
+    // (a) the cap counts distinct notifications
+    expect(readme).toMatch(/counted per distinct notification, not per delivery row/);
+    expect(readme).toMatch(/count\(DISTINCT dedupe_key\) AS distinct_sent/);
+    expect(readme).toMatch(/key_already_sent/);
+    expect(schemaPrisma).toMatch(/counts DISTINCT NOTIFICATIONS, not delivery rows/);
+    expect(schemaPrisma).toMatch(/count\(DISTINCT dedupe_key\)/);
+    // (b) the defaults for a user without a prefs row equal the column defaults
+    const dflt = (column: string) =>
+      new RegExp(`ALTER COLUMN "${column}" SET DEFAULT (\\d+)`).exec(migration0002)?.[1];
+    const [start, end, cap] = [
+      dflt('quiet_hours_start'),
+      dflt('quiet_hours_end'),
+      dflt('daily_cap'),
+    ];
+    expect([start, end, cap]).toEqual(['22', '8', '5']);
+    expect(readme).toMatch(
+      new RegExp(
+        `\`timezone\` null \\(UTC\\), \`quiet_hours_start\` ${start}, \`quiet_hours_end\` ${end}, \`daily_cap\` ${cap}\\.`,
+      ),
+    );
+    for (const field of ['weeklyDigestEmail', 'realtimePush', 'realtimeEmail']) {
+      expect(schemaPrisma).toMatch(new RegExp(`${field}\\s+Boolean\\s+@default\\(true\\)`));
+    }
+    expect(readme).toMatch(
+      /`weekly_digest_email` true, `realtime_push` true, `realtime_email` true/,
+    );
+    expect(readme).toMatch(/LEFT JOINs from `users` and COALESCEs/);
+    expect(schemaPrisma).toMatch(/a user without one has exactly these column defaults/);
+    // (c) batched is terminal; the digest is how a withheld signal reaches the user
+    expect(readme).toMatch(/\*\*`batched` rows\*\*[^\n]*are terminal/);
+    expect(readme).toMatch(/never takes them/);
+    expect(readme).toMatch(/No status transition and no batch message kind exist/);
+    expect(schemaPrisma).toMatch(
+      /'batched' means the cap withheld the notification\. It is terminal/,
+    );
+    // F4: sweep index and retention
+    expect(readme).toMatch(/partial index `notification_deliveries_open_idx`/);
+    expect(readme).toMatch(/delete `sent`, `batched` and `failed` rows older than 35 days/);
+    expect(readme).toMatch(/never delete `pending` rows/);
+    expect(schemaPrisma).toMatch(
+      /notification_deliveries_open_idx \(status\) WHERE status IN \('pending', 'failed'\)/,
+    );
+  });
+
+  it('CSN-058 and CSN-027 notes: one unit form, derived related lessons, lock kinds', () => {
+    expect(readme).toMatch(/`unit` \(always the unit slug/);
+    expect(readme).toMatch(/"related lessons" are derived, not stored/);
+    expect(readme).toMatch(/whose `body` contains that term's slug/);
+    expect(readme).not.toMatch(/unit slug or title/);
+    expect(schemaPrisma).not.toMatch(/unit slug or title/);
+    expect(schemaPrisma).toMatch(/unit is always the unit slug/);
+    expect(readme).toMatch(
+      /transaction-level lock \(`pg_advisory_xact_lock`\) only for short claims/,
+    );
+    expect(readme).toMatch(
+      /session-level lock \(`pg_advisory_lock` \/ `pg_advisory_unlock`\) on a dedicated connection/,
+    );
+    expect(readme).toMatch(/past its default timeout/);
+    expect(schemaPrisma).toMatch(/session-level pg_advisory_lock on a dedicated connection/);
+  });
 });

@@ -740,8 +740,10 @@ model BaseRate {
 // run_key is the slot: 'YYYY-MM-DD' for a daily job, 'YYYY-MM-DDTHH' (UTC hour) for an
 // hourly job; its first ten characters must equal run_date (checked in SQL). Unique
 // (job, run_key), so a daily job has one row per day and an hourly job one row per hour.
-// A re-run (--force, retry after failure) updates the slot's row. Take the advisory lock
-// on (job, run_key) and skip the slot when its row has status 'success'.
+// A re-run (--force, retry after failure) updates the slot's row. Take an advisory lock on
+// (job, run_key) (transaction-level pg_advisory_xact_lock only for short claims; for jobs
+// that run for minutes a session-level pg_advisory_lock on a dedicated connection) and skip
+// the slot when its row has status 'success'.
 // status: 'running' | 'success' | 'failed' (checked in SQL). A run that finishes with a
 // warning (drift, universe diff) is still 'success' so the idempotent skip works; the
 // warning goes in details.
@@ -914,8 +916,11 @@ model Alert {
 // timezone is an IANA name; null means UTC. Quiet hours are local hours 0..23: the window
 // runs from quiet_hours_start up to, not including, quiet_hours_end and wraps past midnight
 // when start is greater than end (default 22 to 8); start equal to end means no quiet hours.
-// daily_cap is the most real-time notifications sent per local day (default 5); the sends
-// are counted from notification_deliveries.
+// daily_cap is the most distinct real-time notifications sent per local day (default 5; a
+// send on both channels counts once); they are counted from notification_deliveries.
+// The row is optional: a user without one has exactly these column defaults (weekly digest
+// on, push on, email on, timezone UTC, quiet hours 22 to 8, cap 5). The CSN-060 jobs read
+// prefs through one function that LEFT JOINs from users and COALESCEs to those values.
 model NotificationPref {
   userId            String   @id @map("user_id")
   weeklyDigestEmail Boolean  @default(true) @map("weekly_digest_email")
@@ -961,11 +966,19 @@ model PushSubscription {
 // for an alert rule (for example 'alert:42:2026-10-24T13', so the hourly SG12 job fires at
 // most once per hour), 'digest:<ISO week>' and 'briefing:<ISO week>' for the weekly mails.
 // kind: 'signal' | 'alert' | 'digest' | 'briefing'. status: 'pending' (decided, held for
-// quiet hours or the next batch) | 'sent' (sent_at is set) | 'batched' (over the daily
-// cap, goes into the next batch or the digest) | 'failed'. The per-user daily cap counts
-// rows with kind in (signal, alert), status 'sent' and sent_at inside the user's local day.
-// signal_id and alert_id are optional links (set null if the signal or alert is deleted);
-// the digest uses signal_id to leave out signals already pushed.
+// quiet hours) | 'sent' (sent_at is set) | 'batched' | 'failed'.
+// The per-user daily cap counts DISTINCT NOTIFICATIONS, not delivery rows: one notification
+// is one dedupe_key, so a send on push and on email counts once (count(DISTINCT dedupe_key)
+// over kind in (signal, alert), status 'sent', sent_at inside the user's local day).
+// 'batched' means the cap withheld the notification. It is terminal: it is never sent
+// individually and never re-claimed (the claim only takes pending and failed rows), and its
+// dedupe_key stays taken. The weekly digest, which lists the week's signals on the user's
+// coins minus those with a 'sent' row, is how a withheld signal still reaches the user.
+// signal_id and alert_id are optional links, set null (the row stays, so the cap count and
+// the dedupe record survive) if the signal or alert is deleted; the digest uses signal_id.
+// notification_deliveries_open_idx (status) WHERE status IN ('pending', 'failed') is a
+// hand-written partial index (Prisma cannot express it) for the release and retry sweep.
+// Retention: see README, "For CSN-060".
 model NotificationDelivery {
   id        BigInt       @id @default(autoincrement())
   userId    String       @map("user_id")
@@ -1053,8 +1066,9 @@ model StripeEvent {
 // ---------------------------------------------------------------------------
 
 // id is the lesson slug. body is structured JSON validated by the app (glossary terms used
-// live there). unit is the unit slug or title the lesson belongs to (for example 'basics');
-// the path order is position. reviewed_by / reviewed_at stay null until a human has
+// live there; a glossary term's related lessons are the lessons whose body holds its slug).
+// unit is always the unit slug the lesson belongs to (for example 'basics'); the path order
+// is position. reviewed_by / reviewed_at stay null until a human has
 // reviewed the text, as for asset_explainers.
 model Lesson {
   id               String    @id

@@ -9,11 +9,15 @@
  * Everything outside the process (HTTP, clock, sleeping, database) is injected, so the job runs
  * in tests with no network and no database. `run()` wires the real ones.
  *
- * Idempotent per day: `job_runs` is unique on (job, run_date), and a day already recorded as
- * `ok` is skipped.
+ * Idempotent per slot: `job_runs` is unique on (job, run_key). This is a weekly job, so its slot
+ * (`run_key`) is the UTC run date, `YYYY-MM-DD`, and `run_date` is the same day. A slot already
+ * recorded with status `success` is skipped; a `running` or `failed` row is reset and re-run.
+ * Status vocabulary is `running | success | failed` (CHECK `job_runs_status_check`).
  *
- * `job_runs` has no column for a payload, so the added / removed / remapped detail goes to the
- * log as one JSON line; the row keeps status, timings and the number of rows written.
+ * The run's payload is stored in `job_runs.details` (jsonb) so a run's diff is queryable from the
+ * database: added, removed, remapped and reactivated coins, `delisted` (id, symbol, reason,
+ * delisted_at) and the separate `stablecoins` list. A concise JSON line goes to the log as well.
+ * The row also keeps status, timings and the number of rows written. A failed run stores `{}`.
  */
 import { pathToFileURL } from 'node:url';
 import {
@@ -43,18 +47,36 @@ import type { PrismaClient } from '@coinsnipe/db';
 
 export const UNIVERSE_JOB = 'universe' as const;
 
-/** What the job needs from the database. There is deliberately no delete operation. */
+export type JsonValue =
+  string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
+/** The `job_runs.details` payload: always a JSON object. */
+export type JobRunDetails = { [key: string]: JsonValue };
+
+/** The `job_runs.status` values the job writes (the table also allows `running`). */
+export type FinishedRunStatus = 'success' | 'failed';
+
+/**
+ * What the job needs from the database. There is deliberately no delete operation.
+ * `runKey` is the `job_runs.run_key` slot; for this weekly job it is the UTC day, `YYYY-MM-DD`.
+ */
 export interface UniverseStore {
   /** Every stored asset, active or not. */
   loadAssets(): Promise<UniverseAsset[]>;
-  /** The recorded run for this day, if any. */
-  getRun(job: string, runDate: string): Promise<{ status: string } | null>;
+  /** The recorded run for this slot, if any. */
+  getRun(job: string, runKey: string): Promise<{ status: string } | null>;
   /** Records the run as started (creates the row, or resets a failed or stale one). */
-  startRun(job: string, runDate: string, startedAt: Date): Promise<void>;
+  startRun(job: string, runKey: string, startedAt: Date): Promise<void>;
   finishRun(
     job: string,
-    runDate: string,
-    outcome: { status: 'ok' | 'failed'; finishedAt: Date; rows: number; error: string | null },
+    runKey: string,
+    outcome: {
+      status: FinishedRunStatus;
+      finishedAt: Date;
+      rows: number;
+      error: string | null;
+      details: JobRunDetails;
+    },
   ): Promise<void>;
   /** Inserts new assets and updates existing ones. Sets active = true and clears delisted_at. */
   upsertAssets(assets: readonly UniverseAsset[]): Promise<void>;
@@ -79,8 +101,10 @@ export interface UniverseJobDeps {
 }
 
 export interface UniverseJobResult {
-  readonly status: 'ok' | 'skipped';
+  readonly status: 'success' | 'skipped';
+  /** The UTC day of the run; also the `job_runs.run_key` slot of this weekly job. */
   readonly runDate: string;
+  readonly runKey: string;
   /** Rows written: upserts plus rows marked inactive. */
   readonly rows: number;
   readonly counts: {
@@ -108,6 +132,46 @@ function utcDay(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+/**
+ * The payload stored in `job_runs.details` for a successful run. Everything is plain JSON
+ * (dates as ISO strings). `delisted` joins the rows marked inactive with the reason they left,
+ * so a survivorship-free backtest can read delisted_at and the reason from the run that set it.
+ */
+export function buildRunDetails(
+  runKey: string,
+  result: UniverseBuildResult,
+  written: number,
+): JobRunDetails {
+  const { diff } = result;
+  const reasonById = new Map(diff.removed.map((r) => [r.id, r]));
+  const details = {
+    event: 'universe-diff',
+    runKey,
+    assets: result.assets.length,
+    rowsWritten: written,
+    added: diff.added.map((a) => ({ id: a.id, symbol: a.symbol, sector: a.sectorId })),
+    removed: diff.removed,
+    delisted: result.delist.map((d) => ({
+      id: d.id,
+      symbol: reasonById.get(d.id)?.symbol ?? null,
+      reason: reasonById.get(d.id)?.reason ?? null,
+      delistedAt: d.delistedAt.toISOString(),
+    })),
+    remapped: diff.remapped,
+    reactivated: diff.reactivated,
+    stablecoins: result.stablecoins,
+    excluded: result.excluded.length,
+    incomplete: result.incomplete,
+    unclassified: result.unclassified.map((u) => u.id),
+    seedNotInUniverse: result.seedNotInUniverse,
+    fuzzyMatches: result.fuzzyMatches,
+    unmapped: result.unmappedReport.length,
+  };
+  // Drop anything that is not JSON (undefined fields, Dates inside a field change).
+  return JSON.parse(JSON.stringify(details)) as JobRunDetails;
+}
+
+/** The concise log line: the same run, with the long lists reduced to counts or ids. */
 function diffLogLine(runDate: string, result: UniverseBuildResult, written: number): string {
   const { diff } = result;
   return JSON.stringify({
@@ -133,16 +197,18 @@ function diffLogLine(runDate: string, result: UniverseBuildResult, written: numb
 export async function runUniverseJob(deps: UniverseJobDeps): Promise<UniverseJobResult> {
   const startedAt = deps.now();
   const runDate = utcDay(startedAt);
+  // Weekly job: one slot per UTC day it runs, so the slot key is the run date.
+  const runKey = runDate;
   const { store, log } = deps;
 
-  const existing = await store.getRun(UNIVERSE_JOB, runDate);
-  if (existing?.status === 'ok') {
+  const existing = await store.getRun(UNIVERSE_JOB, runKey);
+  if (existing?.status === 'success') {
     log(
       JSON.stringify({ job: UNIVERSE_JOB, runDate, event: 'skipped', reason: 'already ran today' }),
     );
-    return { status: 'skipped', runDate, rows: 0, counts: ZERO_COUNTS };
+    return { status: 'skipped', runDate, runKey, rows: 0, counts: ZERO_COUNTS };
   }
-  await store.startRun(UNIVERSE_JOB, runDate, startedAt);
+  await store.startRun(UNIVERSE_JOB, runKey, startedAt);
 
   try {
     const httpDeps = { fetch: deps.fetch, sleep: deps.sleep, now: () => deps.now().getTime() };
@@ -203,15 +269,17 @@ export async function runUniverseJob(deps: UniverseJobDeps): Promise<UniverseJob
     log(formatUnmappedReport(result.unmappedReport));
     log(formatUnclassifiedReport(result.unclassified));
     log(formatSeedMissingLine(result.seedNotInUniverse));
-    await store.finishRun(UNIVERSE_JOB, runDate, {
-      status: 'ok',
+    await store.finishRun(UNIVERSE_JOB, runKey, {
+      status: 'success',
       finishedAt: deps.now(),
       rows,
       error: null,
+      details: buildRunDetails(runKey, result, rows),
     });
     return {
-      status: 'ok',
+      status: 'success',
       runDate,
+      runKey,
       rows,
       counts: {
         added: result.diff.added.length,
@@ -226,11 +294,12 @@ export async function runUniverseJob(deps: UniverseJobDeps): Promise<UniverseJob
   } catch (error) {
     const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
     try {
-      await store.finishRun(UNIVERSE_JOB, runDate, {
+      await store.finishRun(UNIVERSE_JOB, runKey, {
         status: 'failed',
         finishedAt: deps.now(),
         rows: 0,
         error: message,
+        details: {},
       });
     } catch {
       // Keep the original failure; the run row stays 'running' and the next run resets it.
@@ -247,10 +316,14 @@ function dayToDate(day: string): Date {
   return new Date(`${day}T00:00:00.000Z`);
 }
 
+const RUN_KEY = /^\d{4}-\d{2}-\d{2}(T\d{2})?$/;
+
 export function createPrismaUniverseStore(db: PrismaClient): UniverseStore {
-  const runKey = (job: string, runDate: string) => ({
-    job_runDate: { job, runDate: dayToDate(runDate) },
-  });
+  /** The unique key (job, run_key). The CHECK ties run_key's first ten characters to run_date. */
+  const slot = (job: string, runKey: string) => {
+    if (!RUN_KEY.test(runKey)) throw new Error(`Invalid job_runs run_key: ${runKey}`);
+    return { job_runKey: { job, runKey } };
+  };
   return {
     async loadAssets() {
       const rows = await db.asset.findMany({ orderBy: { id: 'asc' } });
@@ -274,30 +347,44 @@ export function createPrismaUniverseStore(db: PrismaClient): UniverseStore {
       }));
     },
 
-    async getRun(job, runDate) {
+    async getRun(job, runKey) {
       const row = await db.jobRun.findUnique({
-        where: runKey(job, runDate),
+        where: slot(job, runKey),
         select: { status: true },
       });
       return row;
     },
 
-    async startRun(job, runDate, startedAt) {
+    async startRun(job, runKey, startedAt) {
       await db.jobRun.upsert({
-        where: runKey(job, runDate),
-        create: { job, runDate: dayToDate(runDate), status: 'running', startedAt },
-        update: { status: 'running', startedAt, finishedAt: null, rows: null, error: null },
+        where: slot(job, runKey),
+        create: {
+          job,
+          runKey,
+          runDate: dayToDate(runKey.slice(0, 10)),
+          status: 'running',
+          startedAt,
+        },
+        update: {
+          status: 'running',
+          startedAt,
+          finishedAt: null,
+          rows: null,
+          error: null,
+          details: {},
+        },
       });
     },
 
-    async finishRun(job, runDate, outcome) {
+    async finishRun(job, runKey, outcome) {
       await db.jobRun.update({
-        where: runKey(job, runDate),
+        where: slot(job, runKey),
         data: {
           status: outcome.status,
           finishedAt: outcome.finishedAt,
           rows: outcome.rows,
           error: outcome.error,
+          details: outcome.details,
         },
       });
     },
