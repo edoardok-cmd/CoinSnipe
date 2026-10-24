@@ -19,6 +19,14 @@
 #   - The tracked file in the checkout you run this from is the source of truth; running it from a
 #     checkout with an older hook installs that older hook.
 #
+# Side effect: with core.hooksPath set, git runs hooks ONLY from that directory. Any other hook in
+# <git common dir>/hooks (pre-commit, commit-msg, ...) and any global/system core.hooksPath stop
+# running in this clone. The installer warns (stderr) when it finds such hooks; it does not copy
+# or chain them.
+# Rollback: git config --local --unset core.hooksPath  &&  rm -rf <git common dir>/coinsnipe-hooks
+#   (`pnpm install` re-applies the guard; `pnpm install --ignore-scripts` skips it once, with NO
+#   protection until the installer runs again.)
+#
 # Usage:
 #   bash scripts/install-git-hooks.sh          install / refresh (idempotent; quiet if nothing to do)
 #   bash scripts/install-git-hooks.sh --check  exit 0 only if the guard is active and current, else 1
@@ -162,5 +170,30 @@ elif [ "$need_cfg" = 1 ]; then
   echo "install-git-hooks: push guard installed ($dest)"
 else
   echo "install-git-hooks: push guard refreshed ($dest)"
+fi
+
+# Only when core.hooksPath was (re)pointed: say what stops running. Active hooks in the clone's
+# own hooks dir (a pre-push identical to the tracked one is the superseded hand-installed copy,
+# so it is not news), and a global/system hooksPath, are shadowed from now on.
+if [ "$need_cfg" = 1 ]; then
+  shadowed=""
+  if [ -d "$common/hooks" ]; then
+    for f in "$common/hooks"/*; do
+      [ -f "$f" ] || continue
+      b=$(basename "$f")
+      case "$b" in *.sample) continue ;; esac
+      [ "$b" = pre-push ] && cmp -s "$f" "$src" && continue
+      shadowed="$shadowed $b"
+    done
+  fi
+  gh=$(git -C "$root" config --global --get core.hooksPath 2>/dev/null || true)
+  sh=$(git -C "$root" config --system --get core.hooksPath 2>/dev/null || true)
+  if [ -n "$shadowed" ] || [ -n "$gh$sh" ]; then
+    warn "WARNING: git now runs hooks only from $destdir in this clone."
+    [ -n "$shadowed" ] && warn "  These hooks in $common/hooks will NO LONGER RUN:$shadowed"
+    [ -n "$gh" ] && warn "  Your global core.hooksPath ($gh) is shadowed in this clone."
+    [ -n "$sh" ] && warn "  The system core.hooksPath ($sh) is shadowed in this clone."
+    warn "  Nothing was copied or chained. To undo: git config --local --unset core.hooksPath && rm -rf $destdir (see README)."
+  fi
 fi
 exit 0

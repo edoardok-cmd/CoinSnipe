@@ -59,6 +59,21 @@ hook (`scripts/git-hooks/pre-push`) refuses any push whose history contains a fi
   after you move or rename the clone folder, run `pnpm install` or the installer again. Until
   then git can silently skip the guard. `--check` tells you.
 - If your git folder is read-only the installer warns and does not install; fix that and re-run.
+- **Other hooks stop running.** Git runs hooks only from the guard's folder once it is on. In this
+  clone, other hooks in `.git/hooks` (pre-commit, commit-msg, ...) and any global or system
+  `core.hooksPath` hooks no longer run. The installer lists what it finds. It does not copy or
+  chain them.
+- **Remove the guard** (only if you must):
+
+  ```bash
+  git config --local --unset core.hooksPath
+  rm -rf "$(git rev-parse --git-common-dir)/coinsnipe-hooks"
+  ```
+
+  `pnpm install` puts it back, because it runs the installer. To skip it for one install, use
+  `pnpm install --ignore-scripts`. That leaves you with **no protection** until you run the
+  installer again, so do not push in that state.
+
 - Tests: `pnpm test:hooks`.
 
 ## Project context

@@ -247,6 +247,116 @@ bash "$C/scripts/install-git-hooks.sh" >/dev/null 2>&1
 commit_file "$C" docs/new.md "fine"
 expect_rc 0 "new clean commit on top of already-published history is allowed" g "$C" push origin pub
 
+echo "(xi) task-r1 F1: renames in history, merge commits and root commits are caught by the path-log layer"
+guard_clone() { mk_remote "$1"; mk_clone "$1"; bash "$C/scripts/install-git-hooks.sh" >/dev/null 2>&1; }
+guard_clone r
+g "$C" checkout -q -b ren
+commit_file "$C" docs/decisions.md "internal"
+g "$C" mv docs/decisions.md docs/notes.md && g "$C" commit -qm "rename away"
+[ -z "$(g "$C" rev-list --objects ren --not --remotes=origin | grep -Ei 'decisions\.md$')" ] \
+  && ok "precondition: rev-list --objects alone does NOT name the renamed doc" || no "precondition: rev-list --objects alone does NOT name the renamed doc"
+expect_refused "add-then-rename (different basename) refused" g "$C" push origin ren
+grep -q 'docs/decisions.md' "$TMP/last.out" && ok "...and the message names the ORIGINAL path" || no "...and the message names the ORIGINAL path"
+
+guard_clone r
+g "$C" checkout -q -b side
+commit_file "$C" docs/decisions.md "internal"
+g "$C" mv docs/decisions.md docs/notes.md && g "$C" commit -qm "rename on side"
+g "$C" checkout -q -b merged main
+commit_file "$C" main-only.txt "m"
+g "$C" merge -q --no-ff side -m "merge side" >/dev/null 2>&1
+expect_refused "doc introduced+renamed on a side branch, merged with a merge commit: refused" g "$C" push origin merged
+
+# The next two cases use the same blob under two names in one tree: rev-list --objects prints it
+# once, under the first name (docs/a.md), so ONLY the path-log layer can see docs/decisions.md.
+guard_clone r
+g "$C" checkout -q -b side2
+commit_file "$C" docs/a.md "internal"
+g "$C" checkout -q -b evil main
+commit_file "$C" main-only.txt "m"
+g "$C" merge -q --no-ff --no-commit side2 >/dev/null 2>&1
+echo internal >"$C/docs/decisions.md"; g "$C" add -f -A; g "$C" commit -qm "merge that itself adds the doc"
+[ -z "$(g "$C" rev-list --objects evil --not --remotes=origin | grep -Ei 'decisions\.md$')" ] \
+  && ok "precondition: rev-list --objects does NOT name docs/decisions.md (same blob as docs/a.md)" || no "precondition: rev-list --objects does NOT name docs/decisions.md"
+expect_refused "doc added only inside a merge commit (no later touch): refused (needs -m)" g "$C" push origin evil
+
+guard_clone r
+printf '[log]\n\tshowRoot = false\n' >"$TMP/noroot.cfg"
+g "$C" checkout -q --orphan rooty
+g "$C" rm -rfq . >/dev/null 2>&1
+mkdir -p "$C/docs"; echo internal >"$C/docs/a.md"; echo internal >"$C/docs/decisions.md"
+g "$C" add -f -A; g "$C" commit -qm "root commit holding the doc"
+[ -z "$(g "$C" rev-list --objects rooty | grep -Ei 'decisions\.md$')" ] \
+  && ok "precondition: rev-list --objects does NOT name docs/decisions.md (same blob as docs/a.md)" || no "precondition: rev-list --objects does NOT name docs/decisions.md"
+GIT_CONFIG_GLOBAL="$TMP/noroot.cfg" expect_refused "root commit holding the doc, hostile log.showRoot=false: refused" g "$C" push origin rooty
+
+guard_clone r
+g "$C" checkout -q -b cleanren
+commit_file "$C" docs/a.md "a"
+g "$C" mv docs/a.md docs/b.md && g "$C" commit -qm "rename clean file"
+g "$C" checkout -q -b cleanside main
+commit_file "$C" side.txt "s"
+g "$C" checkout -q cleanren
+g "$C" merge -q --no-ff cleanside -m "clean merge" >/dev/null
+expect_rc 0 "clean branch with renames and a merge commit still pushes" g "$C" push origin cleanren
+
+echo "      performance sanity: ~500 commits, clean history, hook installed"
+now() { perl -MTime::HiRes=time -e 'printf "%.2f", time' 2>/dev/null || date +%s; }
+guard_clone p
+{
+  for i in $(seq 1 500); do
+    msg="commit $i"; body="content $i"
+    echo "commit refs/heads/perf"
+    echo "committer t <t@example.invalid> $((1700000000 + i)) +0000"
+    echo "data ${#msg}"; echo "$msg"
+    [ "$i" = 1 ] && echo "from refs/heads/main"
+    echo "M 100644 inline dir$((i % 7))/file$((i % 40)).txt"
+    echo "data ${#body}"; echo "$body"
+    echo
+  done
+} | g "$C" fast-import --quiet
+t0=$(now)
+expect_rc 0 "500-commit clean push passes" g "$C" push origin perf
+t1=$(now)
+PERF=$(perl -e "printf '%.2f', $t1 - $t0" 2>/dev/null || echo "$((t1 - t0))")
+echo "  INFO  perf: pushing 500 clean commits through the guard took ${PERF}s"
+perl -e "exit(($t1 - $t0) < 30 ? 0 : 1)" 2>/dev/null && ok "500-commit push under 30s" || no "500-commit push under 30s (${PERF}s)"
+
+echo "(xii) task-r1 F2: installing warns about hooks that will stop running"
+split() { # <label> <want-exit> <cmd...>: runs cmd, keeps stdout in $TMP/o and stderr in $TMP/e
+  local label=$1 want=$2 rc
+  shift 2
+  "$@" >"$TMP/o" 2>"$TMP/e"
+  rc=$?
+  [ "$rc" = "$want" ] && ok "$label (exit $rc)" || { no "$label (exit $rc, wanted $want)"; sed 's/^/        | /' "$TMP/e"; }
+}
+mk_remote w; mk_clone w
+printf '#!/bin/sh\nexit 0\n' >"$C/.git/hooks/pre-commit"; chmod +x "$C/.git/hooks/pre-commit"
+split "install with an active pre-commit hook" 0 bash "$C/scripts/install-git-hooks.sh"
+grep -q 'NO LONGER RUN: pre-commit' "$TMP/e" && ok "...warns and names pre-commit" || no "...warns and names pre-commit"
+grep -q -- '--unset core.hooksPath' "$TMP/e" && ok "...and points at the rollback" || no "...and points at the rollback"
+split "second install (nothing changed)" 0 bash "$C/scripts/install-git-hooks.sh"
+[ ! -s "$TMP/e" ] && ok "...is silent" || no "...is silent"
+
+mk_remote w; mk_clone w
+split "install with only the default .sample hooks" 0 bash "$C/scripts/install-git-hooks.sh"
+[ ! -s "$TMP/e" ] && ok "...no warning" || { no "...no warning"; cat "$TMP/e"; }
+
+mk_remote w; mk_clone w
+cp "$C/scripts/git-hooks/pre-push" "$C/.git/hooks/pre-push"
+split "install with only a pre-push identical to the tracked one (hand-installed copy)" 0 bash "$C/scripts/install-git-hooks.sh"
+[ ! -s "$TMP/e" ] && ok "...no warning (superseded copy)" || { no "...no warning (superseded copy)"; cat "$TMP/e"; }
+
+mk_remote w; mk_clone w
+printf '#!/bin/sh\n# something else\n' >"$C/.git/hooks/pre-push"; chmod +x "$C/.git/hooks/pre-push"
+split "install with a DIFFERENT pre-push in .git/hooks" 0 bash "$C/scripts/install-git-hooks.sh"
+grep -q 'NO LONGER RUN: pre-push' "$TMP/e" && ok "...warns and names pre-push" || no "...warns and names pre-push"
+
+mk_remote w; mk_clone w
+printf '[core]\n\thooksPath = /opt/company/hooks\n' >"$TMP/global2.cfg"
+GIT_CONFIG_GLOBAL="$TMP/global2.cfg" split "install with a global hooksPath" 0 bash "$C/scripts/install-git-hooks.sh"
+grep -q 'global core.hooksPath (/opt/company/hooks) is shadowed' "$TMP/e" && ok "...warns that the global hooksPath is shadowed" || no "...warns that the global hooksPath is shadowed"
+
 echo
 echo "pre-push guard tests: $pass passed, $fail failed"
 [ "$fail" = 0 ]
