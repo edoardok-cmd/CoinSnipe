@@ -192,6 +192,76 @@ test.describe('marketing page', () => {
     expect(collisions).toBe(0);
   });
 
+  // CSN-010-FOLLOWUP-3: the sweep must rotate about the radar centre (130,130 of the 260 viewBox),
+  // not the wedge bbox centre, at every width. Motion is enabled; the animation is paused and
+  // seeked so the sampled transform is deterministic.
+  for (const vp of VIEWPORTS) {
+    test(`radar sweep rotates about the radar centre at ${vp.name}`, async ({ browser }) => {
+      const ctx = await browser.newContext({
+        viewport: { width: vp.width, height: vp.height },
+        reducedMotion: 'no-preference',
+      });
+      const page = await ctx.newPage();
+      await page.goto('/', { waitUntil: 'networkidle' });
+      await page.getByRole('tab', { name: /Portfolio/ }).click();
+      const m = await page.evaluate(() => {
+        const g = document.querySelector<SVGGElement>('.radar .sweep')!;
+        const svg = g.ownerSVGElement!;
+        const anims = g.getAnimations();
+        // Screen position of the wedge apex (130,130 in user space) under the g's current transform.
+        const at = (ux: number, uy: number) => {
+          const c = g.getScreenCTM()!;
+          return { x: c.a * ux + c.c * uy + c.e, y: c.b * ux + c.d * uy + c.f };
+        };
+        const apex = () => at(130, 130);
+        // Far end of the wedge's straight edge (130,8): 122 user units from the apex.
+        const tip = () => at(130, 8);
+        const seek = (t: number) => {
+          anims.forEach((a) => {
+            a.pause();
+            a.currentTime = t;
+          });
+          return { apex: apex(), tip: tip() };
+        };
+        const r = svg.getBoundingClientRect();
+        const centre = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+        const times = [0, 500, 1000, 2000, 3000];
+        const all = times.map(seek);
+        const samples = all.map((a) => a.apex);
+        const tips = all.map((a) => a.tip);
+        // At t=0 the angle is 0 and at t=2000 (half of 4s) it is 180deg: the fixed point of the
+        // rotation is the midpoint of the apex positions at those two times.
+        const rotCentre = {
+          x: (samples[0].x + samples[3].x) / 2,
+          y: (samples[0].y + samples[3].y) / 2,
+        };
+        return { animations: anims.length, centre, rotCentre, samples, tips, times, size: r.width };
+      });
+      expect(m.animations).toBeGreaterThan(0);
+      console.log(`radar ${vp.name}`, JSON.stringify(m));
+      expect(Math.abs(m.rotCentre.x - m.centre.x)).toBeLessThan(0.5);
+      expect(Math.abs(m.rotCentre.y - m.centre.y)).toBeLessThan(0.5);
+      for (const s of m.samples) {
+        expect(Math.abs(s.x - m.centre.x)).toBeLessThan(0.5);
+        expect(Math.abs(s.y - m.centre.y)).toBeLessThan(0.5);
+      }
+      // The wedge tip must actually orbit the centre: constant radius (122 user units, scaled),
+      // and an angle that advances 360deg per 4s from the t=0 angle (guards a no-op keyframe).
+      const radius = (m.size / 260) * 122;
+      const angle = (p: { x: number; y: number }) =>
+        (Math.atan2(p.y - m.centre.y, p.x - m.centre.x) * 180) / Math.PI;
+      const a0 = angle(m.tips[0]);
+      m.tips.forEach((t, i) => {
+        expect(Math.abs(Math.hypot(t.x - m.centre.x, t.y - m.centre.y) - radius)).toBeLessThan(0.5);
+        const expected = (360 * m.times[i]) / 4000;
+        const delta = ((((angle(t) - a0 - expected + 540) % 360) + 360) % 360) - 180;
+        expect(Math.abs(delta)).toBeLessThan(1);
+      });
+      expect(Math.abs(angle(m.tips[1]) - a0)).toBeGreaterThan(30);
+      await ctx.close();
+    });
+  }
+
   test('nav highlights Portfolio while the portfolio step is centred', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/', { waitUntil: 'networkidle' });

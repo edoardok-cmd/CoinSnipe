@@ -976,9 +976,12 @@ html {
   background: rgba(20, 28, 26, 0.9);
   border: 1px solid var(--cs-line-2);
 }
+/* Rotate about the radar centre (130,130 of the 260 viewBox), not the wedge bbox centre
+   (fill-box 50% 50% sat at ~173,69 and made the sweep orbit off-centre at every width).
+   view-box makes the origin a user-unit point, so it scales with the svg. */
 .cs .sweep {
-  transform-origin: 50% 50%;
-  transform-box: fill-box;
+  transform-box: view-box;
+  transform-origin: 130px 130px;
 }
 @media (prefers-reduced-motion: no-preference) {
   .cs .sweep {
