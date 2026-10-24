@@ -676,7 +676,9 @@ function resolveCorrelation(
       days: cfg.indicators.correlationDays,
       returns: cfg.indicators.returns,
     });
-    if (value !== null) return { value, source: 'computed' };
+    // A zero, negative or NaN close in the window makes a return non-finite and the correlation
+    // NaN; that is a missing correlation, not a result (the rest of the score must still work).
+    if (value !== null && Number.isFinite(value)) return { value, source: 'computed' };
   }
   return { value: null, source: 'missing' };
 }

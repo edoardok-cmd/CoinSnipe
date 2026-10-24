@@ -725,6 +725,38 @@ describe('macro scaling: A4, A6, A7 x BTC-Nasdaq correlation (floor 0.3, cap 1)'
     ).toThrow(RangeError);
   });
 
+  it('a zero, negative or NaN close in the window makes the correlation missing, not the whole result NaN', () => {
+    const btc = closesOf(300, (k) => 100 * Math.exp(0.01 * k + 0.2 * Math.sin(k)));
+    const ndx = btc.map((x) => x * 2);
+    const bad = (series: 'btc' | 'ndx', value: number) => {
+      const b = [...btc];
+      const n = [...ndx];
+      (series === 'btc' ? b : n)[250] = value;
+      return neutralInputs({ btcNasdaqCorrelation: null, btcCloses: b, nasdaqCloses: n });
+    };
+    const floorCfg = cloneModelConfig();
+    floorCfg.levelA.market.corrMissing = 'floor';
+    for (const series of ['btc', 'ndx'] as const) {
+      for (const value of [0, -5, Number.NaN, Number.POSITIVE_INFINITY]) {
+        const r = marketWeather(bad(series, value));
+        const label = `${series} ${value}`;
+        expect(r.macroScaling.correlationSource, label).toBe('missing');
+        expect(r.macroScaling.correlation, label).toBeNull();
+        expect(r.macroScaling.factor, label).toBe(1);
+        expect(Number.isFinite(r.macroScaling.freedWeight), label).toBe(true);
+        expect(Number.isFinite(r.score), label).toBe(true);
+        expect(r.label, label).not.toBeNull();
+        expect(Math.abs(r.weightSum - 100), label).toBeLessThan(1e-9);
+        expect(
+          r.inputs.every((i) => Number.isFinite(i.effectiveWeight)),
+          label,
+        ).toBe(true);
+        // corrMissing applies exactly as for an absent correlation.
+        expect(marketWeather(bad(series, value), floorCfg).macroScaling.factor, label).toBe(0.3);
+      }
+    }
+  });
+
   it('the correlation window is the config value indicators.correlationDays', () => {
     // Nasdaq mirrors Bitcoin's daily moves for the last 30 days and moves opposite before that.
     const btc = closesOf(200, (k) => 100 * Math.exp(0.003 * k + 0.05 * Math.sin(k * 1.3)));
