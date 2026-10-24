@@ -5,7 +5,7 @@ This package stores facts and computed reads about data; nothing in it gives adv
 
 ## Commands
 
-Set `DATABASE_URL` (pooled, runtime) and `DIRECT_URL` (non-pooled, migrations); the names are in `.env.example`.
+Set `DATABASE_URL` (pooled, runtime) and `DIRECT_URL` (non-pooled, migrations); the names are in `.env.example`. Put them in the environment, or copy `.env.example` to `.env.local` (repo root or `packages/db`): `prisma.config.ts` and the seed load `.env.local` and `.env` themselves (`src/load-env.ts`). Priority, highest first: variables already in the environment (never overridden), `packages/db/.env.local`, root `.env.local`, `packages/db/.env`, root `.env`. Values are never printed. Both files are git-ignored.
 
 | Command                             | What it does                                                    |
 | ----------------------------------- | --------------------------------------------------------------- |
@@ -15,13 +15,54 @@ Set `DATABASE_URL` (pooled, runtime) and `DIRECT_URL` (non-pooled, migrations); 
 | `pnpm -F @coinsnipe/db db:reset`    | `prisma migrate reset` then seed. Local databases only          |
 | `pnpm -F @coinsnipe/db db:seed`     | Upsert the 11 sectors and 20 narratives. Idempotent             |
 
-Rules: every schema change is a new migration (`0002_...`); never edit an applied one. The seed writes reference data only: no price, score or sample data ever goes into a real database.
+`db:migrate` and `db:deploy` do not run the seed; only `db:reset` does. See [Deploying](#deploying).
 
-Tests: `schema.test.ts` always runs. `database.test.ts` needs `DATABASE_URL` pointing at a local Postgres; it builds and drops its own throwaway schema and is skipped otherwise.
+Rules: every schema change is a new migration (`0003_...`, the next number); never edit an applied one. The current migrations are `0001_init` (schema v1) and `0002_schema_v1_1`. The seed writes reference data only: no price, score or sample data ever goes into a real database.
+
+Tests: `schema.test.ts` and `load-env.test.ts` always run. `database.test.ts` needs `DATABASE_URL` pointing at a local Postgres; it builds and drops its own throwaway schemas (applying every migration, and for the upgrade and rollback checks 0001 then 0002 over sample rows) and is skipped otherwise.
+
+## Deploying
+
+Per environment (local, preview, production), in this order:
+
+1. `pnpm -F @coinsnipe/db db:deploy` (`prisma migrate deploy`, using `DIRECT_URL`).
+2. `pnpm -F @coinsnipe/db db:seed`, in **every environment**, once after the first deploy and safe to repeat. The sector and narrative rows are not created by any migration, and `assets.sector_id` is a NOT NULL foreign key to `sectors`, so the first asset insert (CSN-020) fails on an unseeded database. `migrate dev` and `migrate deploy` do not run the seed.
+3. Check: `prisma migrate status` reports up to date; `sectors` has 11 rows and `narratives` 20.
+
+**For CSN-073**: the deploy pipeline and the restore drill run `db:deploy` and then `db:seed`, in that order, in every environment. A database restored from a backup taken before the first seed, a fresh Neon branch, and `migrate reset` all come back without sectors until `db:seed` runs.
+
+Recovering from a bad migration (Prisma has no down migrations):
+
+- A migration that fails to apply changes nothing (each file runs as one transaction). Fix the cause, run `prisma migrate resolve --rolled-back <name>`, deploy again.
+- A migration that applied but must be undone: prefer rolling forward with the next numbered migration. For `0002_schema_v1_1` the exact reverse SQL is in its header, is tested against a populated schema, and lists what it discards; take a dump of the affected tables first, then delete the migration's row from `_prisma_migrations`.
+- On Neon, point-in-time restore to a branch taken before the deploy is the alternative; deploy the app version that matches the restored schema, and run `db:seed` if the restore point predates the first seed.
+- Expand then contract: add the new nullable column, backfill, switch the code, and only then make it NOT NULL or drop the old one, each as its own migration when the table is large or an old app version is still running. Backfills on non-empty tables must be safe under concurrent writes; say how in the migration header.
+- Never run `migrate reset` against a database that holds real user or billing rows.
+
+## As-of rule
+
+`as_of` is the date a value first became known to us. A point-in-time read at date `D` filters `date <= D AND as_of <= D`.
+
+- **Latest-only tables** (every raw table except `macro_daily`): the key never contains `as_of`. The first write sets `as_of`. An upsert of a restated value overwrites the value and `fetched_at` and never advances `as_of`: leave it out of the Prisma `update` clause and out of `ON CONFLICT ... DO UPDATE SET`. Reason: advancing it would drop the row from every read at an earlier date, a hole where production had a value. Keeping it has a bounded leak instead: an earlier read sees the revised number, not the original. CSN-040 accepts the bounded leak and states it in its report.
+- **`macro_daily`** keeps every published vintage (`as_of` is in the key) because macro revisions are material: the backtest reads the latest vintage with `as_of <= D`.
+- **Backfills** have no real first-known date: they set `as_of` to the observation date (a weekly or monthly series: the last day of the period).
+- The rule is written in the `schema.prisma` header and in one comment line on each of the 18 latest-only models. Structural pin: no key other than `macro_daily`'s contains `as_of` (`schema.test.ts`).
+
+## Notes for downstream tasks
+
+- **For CSN-020 (universe load)**: write the universe diff (added, removed, remapped) into `job_runs.details` of the weekly universe run. Run `db:seed` first (see Deploying).
+- **For CSN-027 (runner)**: `job_runs` has one row per `(job, run_key)`. `run_key` is `YYYY-MM-DD` for a daily job and `YYYY-MM-DDTHH` (UTC hour) for an hourly job; it must start with `run_date`. Take the advisory lock on `(job, run_key)`, skip the slot when its row has status `success`, otherwise claim it with `INSERT ... ON CONFLICT (job, run_key) DO UPDATE SET status = 'running', ... WHERE job_runs.status <> 'success'` (zero rows returned means skip). Status is `running`, `success` or `failed`. A run that ends with a warning is still `success`; put the warning in `details`.
+- **For CSN-040 (backtest and drift)**: follow the [As-of rule](#as-of-rule). The drift warning goes into `job_runs.details.warnings` of a `success` row.
+- **For CSN-050 (accounts)**: `accounts` has `access_token`, `refresh_token` and `id_token` columns only because `@auth/prisma-adapter` writes them. CoinSnipe signs users in and never calls the provider afterwards, so drop all three in your `linkAccount` wrapper and store none. The columns stay (the adapter expects them).
+- **For CSN-058 (learn content)**: `lessons` has nullable `unit` (unit slug or title, for example `basics`), `reviewed_by` and `reviewed_at`; `estimated_minutes` holds the minutes and glossary terms used stay in `body`. `quick_checks.options` stays an array of answer texts; `option_explanations` is a nullable array of the same length with one explanation per answer (the existing `explanation` is the overall one). Nothing else in `packages/db` needs a migration for content.
+- **For CSN-060 (notifications)**: delivery state lives in `notification_deliveries`; quiet hours and the daily cap in `notification_prefs`; the last fire time in `alerts.last_fired_at`.
+  - Idempotency: insert with `ON CONFLICT (user_id, channel, dedupe_key) DO NOTHING` and send only when a row was inserted. Keys: `signal:<signals.id>`, `alert:<alerts.id>:<UTC hour, YYYY-MM-DDTHH>` (so the hourly SG12 job fires an alert at most once an hour), `digest:<ISO week>`, `briefing:<ISO week>`.
+  - Daily cap: count rows of the user with `kind` in (`signal`, `alert`), `status = 'sent'` and `sent_at` inside the user's local day (`notification_prefs.timezone`, null means UTC); over the cap, store `status = 'batched'`. Quiet hours (default 22 to 8, local hours, wraps midnight, equal start and end means none): store `status = 'pending'` until they end.
+  - The weekly digest leaves out signals already pushed by joining on `signal_id`.
 
 ## Tables
 
-Raw-fact tables carry `as_of` (date the value was known), `fetched_at` and `source`. Asset-keyed daily tables (`price_daily`, `protocol_metrics_daily`, `etf_flows_daily`, and `scores_daily` with `horizon`) are keyed on `(asset_id, date)`; `derivatives_daily` adds `exchange`, and `macro_daily` is keyed on `(series_id, date, as_of)`. Series-level and market-level daily tables (stablecoin supply, DVOL, Fear & Greed, global market, sector and narrative heat, market weather, alt season, Bitcoin outlook) are keyed on their own series or entity plus `date`. Every daily table has an index on `date`. Raw tables keep the latest value per key, except `macro_daily`, which keeps every published vintage.
+Raw-fact tables carry `as_of` (date the value was known), `fetched_at` and `source`. Asset-keyed daily tables (`price_daily`, `protocol_metrics_daily`, `etf_flows_daily`, and `scores_daily` with `horizon`) are keyed on `(asset_id, date)`; `derivatives_daily` adds `exchange`, and `macro_daily` is keyed on `(series_id, date, as_of)`. Series-level and market-level daily tables (stablecoin supply, DVOL, Fear & Greed, global market, sector and narrative heat, market weather, alt season, Bitcoin outlook) are keyed on their own series or entity plus `date`. Every daily table has an index leading with `date`, every asset-and-date table one leading with `(asset_id, date)` and every user table one leading with `user_id` (`events_calendar` and `key_levels` use their unique index for `(asset_id, date)`); `schema.test.ts` and `database.test.ts` fail when one is dropped. Raw tables keep the latest value per key and never advance `as_of`, except `macro_daily`, which keeps every published vintage (see [As-of rule](#as-of-rule)).
 
 ### Reference
 
@@ -63,7 +104,7 @@ Raw-fact tables carry `as_of` (date the value was known), `fetched_at` and `sour
 - `scenarios`: base, upside and downside paths with the trigger that would confirm each.
 - `signals`: append-only smart signals (SG1 to SG14) with before/after state, plain text and a unique dedupe key.
 - `base_rates`: historical base rates per kind and key with sample size and a thin-history flag, by model version.
-- `job_runs`: one row per job and run date (unique), the idempotency record for scheduled jobs.
+- `job_runs`: one row per job and run slot (unique `(job, run_key)`; a daily job's slot is the date, an hourly job's the UTC hour), the idempotency record for scheduled jobs. Status `running`, `success` or `failed`; `details` holds structured output such as the universe diff or warnings.
 
 ### Users and billing
 
@@ -71,8 +112,9 @@ Raw-fact tables carry `as_of` (date the value was known), `fetched_at` and `sour
 - `profiles`: quiz answers (knowledge 1 to 4, goal, horizon, risk, sectors) and onboarding completion.
 - `holdings`: hand-entered coins a user owns; the amount is optional.
 - `watchlist_items`: coins a user follows.
-- `alerts`: per-user alert rules (kind, JSON params, channel, active).
-- `notification_prefs`: weekly digest, push and email preferences.
+- `alerts`: per-user alert rules (kind, JSON params, channel, active, last fired time).
+- `notification_prefs`: weekly digest, push and email preferences, timezone, quiet hours and the daily cap.
+- `notification_deliveries`: delivery log and idempotency record per user, channel and dedupe key; the per-user daily cap is counted from it.
 - `push_subscriptions`: web push endpoints per user.
 - `lesson_progress`: completed lessons and quiz scores per user.
 - `streaks`: current and longest learning streak per user.
@@ -81,7 +123,7 @@ Raw-fact tables carry `as_of` (date the value was known), `fetched_at` and `sour
 
 ### Content
 
-- `lessons`: authored lessons in path order.
-- `quick_checks`: short quiz questions attached to a lesson.
+- `lessons`: authored lessons in path order, with unit and reviewer.
+- `quick_checks`: short quiz questions attached to a lesson, with an optional explanation per answer.
 - `glossary_terms`: glossary entries (slug, term, one line, body).
 - `asset_explainers`: the four "In plain words" texts per coin, with reviewer and review date.

@@ -1,4 +1,4 @@
-// CoinSnipe database schema v1 (CSN-003). Postgres 16 locally, Neon in production.
+// CoinSnipe database schema v1.1 (CSN-003, CSN-003-FOLLOWUP-3). Postgres 16 locally, Neon in production.
 //
 // Conventions
 // - DB names are snake_case (@map / @@map); Prisma fields are camelCase.
@@ -6,6 +6,18 @@
 // - Raw-fact tables carry provenance: `as_of` (date the value was known, used for
 //   point-in-time reads: the backtest only reads rows with as_of <= rebuild date),
 //   `fetched_at` (when the worker stored it) and `source`.
+// - As-of rule (schema v1.1, CSN-003-FOLLOWUP-3). Point-in-time read: `date <= D AND
+//   as_of <= D`. Every raw table except macro_daily keeps the LATEST value only: its key
+//   never contains as_of, the first write sets as_of, and an upsert of a restated value
+//   overwrites the value and fetched_at but NEVER touches as_of (leave it out of the Prisma
+//   `update` clause and out of `ON CONFLICT ... DO UPDATE SET`). Why: advancing as_of on a
+//   restatement would drop the row from every read at an earlier date (a hole, where
+//   production saw a value); keeping it costs a bounded leak (an earlier read sees the
+//   revised number, not the original). CSN-040 accepts that leak and states it in its
+//   report. macro_daily is the exception: macro revisions are material, so as_of is part of
+//   its key and every published vintage is kept. A historical backfill has no real
+//   first-known date: it sets as_of to the observation date (weekly or monthly series: the
+//   last day of the period). Each affected model repeats the rule in one comment line.
 // - Money and market values are Decimal. Scores, ratios and heat are double precision.
 // - Model outputs written by packages/scoring (quadrant, archetype, bands, phase, regime,
 //   fuel, fragility, labels) are text holding stable lowercase codes, not enums, so a
@@ -174,6 +186,7 @@ model Asset {
 // Raw facts (provenance on every row: as_of, fetched_at, source)
 // ---------------------------------------------------------------------------
 
+// As-of rule: latest-only (as_of set on first insert, never advanced on upsert; see header).
 model PriceDaily {
   assetId      String   @map("asset_id")
   date         DateTime @db.Date
@@ -197,6 +210,7 @@ model PriceDaily {
 }
 
 // Hourly candles for BTC, ETH and the top coins (volume profile K2).
+// As-of rule: latest-only (as_of set on first insert, never advanced on upsert; see header).
 model PriceHourly {
   assetId   String   @map("asset_id")
   ts        DateTime @db.Timestamptz(3) // start of the hour
@@ -216,6 +230,7 @@ model PriceHourly {
   @@map("price_hourly")
 }
 
+// As-of rule: latest-only (as_of set on first insert, never advanced on upsert; see header).
 model ProtocolMetricsDaily {
   assetId      String   @map("asset_id")
   date         DateTime @db.Date
@@ -236,6 +251,7 @@ model ProtocolMetricsDaily {
 }
 
 // chain = 'all' for the global total, otherwise a DefiLlama chain name (assets.defillama_chain).
+// As-of rule: latest-only (as_of set on first insert, never advanced on upsert; see header).
 model StablecoinSupplyDaily {
   date      DateTime @db.Date
   chain     String   @default("all")
@@ -249,6 +265,7 @@ model StablecoinSupplyDaily {
   @@map("stablecoin_supply_daily")
 }
 
+// As-of rule: latest-only (as_of set on first insert, never advanced on upsert; see header).
 model DerivativesDaily {
   assetId         String   @map("asset_id")
   date            DateTime @db.Date
@@ -267,6 +284,7 @@ model DerivativesDaily {
 }
 
 // Daily snapshot of Deribit open interest per expiry and strike (call + put summed). K5.
+// As-of rule: latest-only (as_of set on first insert, never advanced on upsert; see header).
 model OptionsOi {
   date      DateTime @db.Date // snapshot day
   currency  String
@@ -282,6 +300,7 @@ model OptionsOi {
   @@map("options_oi")
 }
 
+// As-of rule: latest-only (as_of set on first insert, never advanced on upsert; see header).
 model DvolDaily {
   currency  String
   date      DateTime @db.Date
@@ -299,8 +318,9 @@ model DvolDaily {
 // Holds every published vintage of a series observation: the key includes as_of (the
 // publication date), so a revision adds a row instead of overwriting the original value and
 // a backtest reading `as_of <= rebuild date` sees what was known then. Other raw tables keep
-// the latest value only. Latest vintage: the row with the greatest as_of per (series_id, date).
-// (series_id, date) lookups use the leading columns of the primary key.
+// the latest value only and never advance as_of (as-of rule in the header). Latest vintage:
+// the row with the greatest as_of per (series_id, date). (series_id, date) lookups use the
+// leading columns of the primary key.
 model MacroDaily {
   seriesId  String   @map("series_id")
   date      DateTime @db.Date
@@ -314,6 +334,7 @@ model MacroDaily {
   @@map("macro_daily")
 }
 
+// As-of rule: latest-only (as_of set on first insert, never advanced on upsert; see header).
 model FearGreedDaily {
   date           DateTime @id @db.Date
   value          Int
@@ -326,6 +347,7 @@ model FearGreedDaily {
 }
 
 // month = first day of the month the GPR reading describes.
+// As-of rule: latest-only (as_of set on first insert, never advanced on upsert; see header).
 model GprMonthly {
   month     DateTime @id @db.Date
   gpr       Float
@@ -337,6 +359,7 @@ model GprMonthly {
 }
 
 // source = provenance (the feed the worker read); publisher = the outlet named by the feed.
+// As-of rule: latest-only (as_of set on first insert, never advanced on upsert; see header).
 model NewsItem {
   id          BigInt   @id @default(autoincrement())
   urlHash     String   @unique @map("url_hash")
@@ -356,6 +379,7 @@ model NewsItem {
   @@map("news_items")
 }
 
+// As-of rule: latest-only (as_of set on first insert, never advanced on upsert; see header).
 model DevActivityWeekly {
   assetId    String   @map("asset_id")
   weekStart  DateTime @map("week_start") @db.Date
@@ -372,6 +396,7 @@ model DevActivityWeekly {
   @@map("dev_activity_weekly")
 }
 
+// As-of rule: latest-only (as_of set on first insert, never advanced on upsert; see header).
 model ExchangeListing {
   id         BigInt   @id @default(autoincrement())
   assetId    String   @map("asset_id")
@@ -393,6 +418,7 @@ model ExchangeListing {
 }
 
 // category distinguishes allocations unlocking on the same day; 'all' when the source has none.
+// As-of rule: latest-only (as_of set on first insert, never advanced on upsert; see header).
 model UnlockEvent {
   id             BigInt   @id @default(autoincrement())
   assetId        String   @map("asset_id")
@@ -411,6 +437,7 @@ model UnlockEvent {
   @@map("unlock_events")
 }
 
+// As-of rule: latest-only (as_of set on first insert, never advanced on upsert; see header).
 model SecurityEvent {
   id        BigInt            @id @default(autoincrement())
   assetId   String            @map("asset_id")
@@ -432,6 +459,7 @@ model SecurityEvent {
 }
 
 // Spot-ETF flows per underlying asset (net_flow_usd positive = net inflow).
+// As-of rule: latest-only (as_of set on first insert, never advanced on upsert; see header).
 model EtfFlowsDaily {
   assetId           String   @map("asset_id")
   date              DateTime @db.Date
@@ -449,6 +477,7 @@ model EtfFlowsDaily {
 }
 
 // side = 'long' | 'short' (which positions would be force-closed at price_level).
+// As-of rule: latest-only (as_of set on first insert, never advanced on upsert; see header).
 model LiquidationCluster {
   id             BigInt   @id @default(autoincrement())
   assetId        String   @map("asset_id")
@@ -467,6 +496,7 @@ model LiquidationCluster {
   @@map("liquidation_clusters")
 }
 
+// As-of rule: latest-only (as_of set on first insert, never advanced on upsert; see header).
 model GlobalMarketDaily {
   date         DateTime @id @db.Date
   btcDominance Float    @map("btc_dominance") // percent of total market cap
@@ -484,6 +514,9 @@ model GlobalMarketDaily {
 // on (date, kind, title) WHERE asset_id IS NULL, written by hand at the end of 0001_init
 // (Prisma cannot express it). Upsert coin rows through the Prisma unique key; upsert
 // market-wide rows with raw SQL `ON CONFLICT (date, kind, title) WHERE asset_id IS NULL`.
+// (asset_id, date) reads use the leading columns of the unique index; 0002 dropped the
+// duplicate (asset_id, date) index.
+// As-of rule: latest-only (as_of set on first insert, never advanced on upsert; see header).
 model EventCalendarEntry {
   id        BigInt            @id @default(autoincrement())
   date      DateTime          @db.Date
@@ -498,7 +531,6 @@ model EventCalendarEntry {
 
   @@unique([assetId, date, kind, title])
   @@index([date])
-  @@index([assetId, date])
   @@map("events_calendar")
 }
 
@@ -621,6 +653,8 @@ model BtcOutlookDaily {
 }
 
 // Zones, never exact lines: low..high. strength_points per master plan K (2 per method ...).
+// (asset_id, date) reads use the leading columns of the unique index; 0002 dropped the
+// duplicate (asset_id, date) index.
 model KeyLevel {
   id             BigInt    @id @default(autoincrement())
   assetId        String    @map("asset_id")
@@ -637,7 +671,6 @@ model KeyLevel {
   asset Asset @relation(fields: [assetId], references: [id])
 
   @@unique([assetId, date, kind, low, high])
-  @@index([assetId, date])
   @@index([date])
   @@map("key_levels")
 }
@@ -676,7 +709,8 @@ model Signal {
   dedupeKey  String   @unique @map("dedupe_key")
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  asset Asset? @relation(fields: [assetId], references: [id])
+  asset      Asset?                 @relation(fields: [assetId], references: [id])
+  deliveries NotificationDelivery[]
 
   @@index([firedAt])
   @@index([assetId, firedAt])
@@ -702,19 +736,30 @@ model BaseRate {
   @@map("base_rates")
 }
 
-// One row per job and run date: the idempotency record for every scheduled job.
-// status examples: 'running', 'succeeded', 'failed'.
+// One row per job and run slot: the idempotency record for every scheduled job.
+// run_key is the slot: 'YYYY-MM-DD' for a daily job, 'YYYY-MM-DDTHH' (UTC hour) for an
+// hourly job; its first ten characters must equal run_date (checked in SQL). Unique
+// (job, run_key), so a daily job has one row per day and an hourly job one row per hour.
+// A re-run (--force, retry after failure) updates the slot's row. Take the advisory lock
+// on (job, run_key) and skip the slot when its row has status 'success'.
+// status: 'running' | 'success' | 'failed' (checked in SQL). A run that finishes with a
+// warning (drift, universe diff) is still 'success' so the idempotent skip works; the
+// warning goes in details.
+// details: JSON object for structured run output, for example the universe diff
+// {added, removed, remapped} or {warnings: [...]}; '{}' when empty.
 model JobRun {
   id         BigInt    @id @default(autoincrement())
   job        String
   runDate    DateTime  @map("run_date") @db.Date
+  runKey     String    @map("run_key")
   status     String
   startedAt  DateTime  @map("started_at") @db.Timestamptz(3)
   finishedAt DateTime? @map("finished_at") @db.Timestamptz(3)
   rows       Int?
   error      String?
+  details    Json      @default("{}")
 
-  @@unique([job, runDate])
+  @@unique([job, runKey])
   @@index([runDate])
   @@map("job_runs")
 }
@@ -741,6 +786,7 @@ model User {
   watchlistItems    WatchlistItem[]
   alerts            Alert[]
   notificationPrefs NotificationPref?
+  deliveries        NotificationDelivery[]
   pushSubscriptions PushSubscription[]
   lessonProgress    LessonProgress[]
   streak            Streak?
@@ -749,6 +795,9 @@ model User {
   @@map("users")
 }
 
+// access_token, refresh_token and id_token are columns only because @auth/prisma-adapter
+// writes them. CoinSnipe signs users in and never calls the provider afterwards, so the
+// Auth.js setup (CSN-050) should drop all three in its linkAccount wrapper and store none.
 model Account {
   id                       String  @id @default(cuid())
   userId                   String  @map("user_id")
@@ -839,19 +888,22 @@ model WatchlistItem {
 }
 
 // asset_id null = market-wide alert. kind and params are defined by the alerts task.
+// last_fired_at is when the alert last produced a notification (null = never).
 model Alert {
-  id        BigInt       @id @default(autoincrement())
-  userId    String       @map("user_id")
-  assetId   String?      @map("asset_id")
-  kind      String
-  params    Json         @default("{}")
-  channel   AlertChannel
-  active    Boolean      @default(true)
-  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id          BigInt       @id @default(autoincrement())
+  userId      String       @map("user_id")
+  assetId     String?      @map("asset_id")
+  kind        String
+  params      Json         @default("{}")
+  channel     AlertChannel
+  active      Boolean      @default(true)
+  lastFiredAt DateTime?    @map("last_fired_at") @db.Timestamptz(3)
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  asset Asset? @relation(fields: [assetId], references: [id])
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  asset      Asset?                 @relation(fields: [assetId], references: [id])
+  deliveries NotificationDelivery[]
 
   @@index([userId])
   @@index([assetId])
@@ -859,12 +911,20 @@ model Alert {
 }
 
 // Pro gating of the real-time options happens in the app, not here.
+// timezone is an IANA name; null means UTC. Quiet hours are local hours 0..23: the window
+// runs from quiet_hours_start up to, not including, quiet_hours_end and wraps past midnight
+// when start is greater than end (default 22 to 8); start equal to end means no quiet hours.
+// daily_cap is the most real-time notifications sent per local day (default 5); the sends
+// are counted from notification_deliveries.
 model NotificationPref {
   userId            String   @id @map("user_id")
   weeklyDigestEmail Boolean  @default(true) @map("weekly_digest_email")
   realtimePush      Boolean  @default(true) @map("realtime_push")
   realtimeEmail     Boolean  @default(true) @map("realtime_email")
   timezone          String?
+  quietHoursStart   Int      @default(22) @map("quiet_hours_start") @db.SmallInt
+  quietHoursEnd     Int      @default(8) @map("quiet_hours_end") @db.SmallInt
+  dailyCap          Int      @default(5) @map("daily_cap") @db.SmallInt
   updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -887,6 +947,41 @@ model PushSubscription {
 
   @@index([userId])
   @@map("push_subscriptions")
+}
+
+// Delivery log and idempotency record for notifications (CSN-060). One row per
+// (user, channel, dedupe_key); the writer inserts with ON CONFLICT DO NOTHING and sends only
+// when a row was inserted, so a re-run of the same job in the same slot cannot send twice.
+// dedupe_key convention: 'signal:<signals.id>' for a signal, 'alert:<alerts.id>:<UTC hour>'
+// for an alert rule (for example 'alert:42:2026-10-24T13', so the hourly SG12 job fires at
+// most once per hour), 'digest:<ISO week>' and 'briefing:<ISO week>' for the weekly mails.
+// kind: 'signal' | 'alert' | 'digest' | 'briefing'. status: 'pending' (decided, held for
+// quiet hours or the next batch) | 'sent' (sent_at is set) | 'batched' (over the daily
+// cap, goes into the next batch or the digest) | 'failed'. The per-user daily cap counts
+// rows with kind in (signal, alert), status 'sent' and sent_at inside the user's local day.
+// signal_id and alert_id are optional links (set null if the signal or alert is deleted);
+// the digest uses signal_id to leave out signals already pushed.
+model NotificationDelivery {
+  id        BigInt       @id @default(autoincrement())
+  userId    String       @map("user_id")
+  channel   AlertChannel
+  kind      String
+  dedupeKey String       @map("dedupe_key")
+  signalId  BigInt?      @map("signal_id")
+  alertId   BigInt?      @map("alert_id")
+  status    String
+  sentAt    DateTime?    @map("sent_at") @db.Timestamptz(3)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  signal Signal? @relation(fields: [signalId], references: [id], onDelete: SetNull)
+  alert  Alert?  @relation(fields: [alertId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, channel, dedupeKey])
+  @@index([userId, sentAt])
+  @@index([signalId])
+  @@index([alertId])
+  @@map("notification_deliveries")
 }
 
 // A row exists once the lesson is completed.
@@ -952,17 +1047,23 @@ model StripeEvent {
 // Content (authored; LLM drafts need human review, strict schema, no numbers)
 // ---------------------------------------------------------------------------
 
-// id is the lesson slug. body is structured JSON validated by the app.
+// id is the lesson slug. body is structured JSON validated by the app (glossary terms used
+// live there). unit is the unit slug or title the lesson belongs to (for example 'basics');
+// the path order is position. reviewed_by / reviewed_at stay null until a human has
+// reviewed the text, as for asset_explainers.
 model Lesson {
-  id               String   @id
-  position         Int      @unique
+  id               String    @id
+  position         Int       @unique
+  unit             String?
   title            String
   summary          String?
-  estimatedMinutes Int?     @map("estimated_minutes")
+  estimatedMinutes Int?      @map("estimated_minutes")
   body             Json
-  published        Boolean  @default(false)
-  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  published        Boolean   @default(false)
+  reviewedBy       String?   @map("reviewed_by")
+  reviewedAt       DateTime? @map("reviewed_at") @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   quickChecks    QuickCheck[]
   lessonProgress LessonProgress[]
@@ -971,14 +1072,18 @@ model Lesson {
 }
 
 // options is a JSON array of answer texts; correct_index points into it (checked in SQL).
+// explanation is the overall explanation. option_explanations, when set, is a JSON array
+// with one text per answer, in the same order and of the same length as options (checked
+// in SQL); null for a question with no per-answer text.
 model QuickCheck {
-  id           BigInt  @id @default(autoincrement())
-  lessonId     String  @map("lesson_id")
-  position     Int
-  question     String
-  options      Json
-  correctIndex Int     @map("correct_index")
-  explanation  String?
+  id                 BigInt  @id @default(autoincrement())
+  lessonId           String  @map("lesson_id")
+  position           Int
+  question           String
+  options            Json
+  correctIndex       Int     @map("correct_index")
+  explanation        String?
+  optionExplanations Json?   @map("option_explanations")
 
   lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
 

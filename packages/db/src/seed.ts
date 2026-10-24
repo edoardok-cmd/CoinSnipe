@@ -5,10 +5,14 @@
  * rows. It writes NO price, score, asset or user data. The sample coin universe is a test
  * fixture and is never loaded into a real database.
  *
- * Run: `pnpm -F @coinsnipe/db db:seed` with DATABASE_URL set.
+ * Run: `pnpm -F @coinsnipe/db db:seed` with DATABASE_URL set, in the environment or in
+ * .env.local / .env (see load-env.ts). Required once per environment after
+ * `prisma migrate deploy`: assets.sector_id is a foreign key to sectors, and no migration
+ * inserts the sectors.
  */
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { PrismaClient } from '@prisma/client';
+import { loadPackageEnv } from './load-env';
 import { NARRATIVES, SECTORS } from './reference-data';
 
 export interface SeedResult {
@@ -37,6 +41,8 @@ export async function seedReferenceData(prisma: PrismaClient): Promise<SeedResul
 }
 
 async function main(): Promise<void> {
+  // Only when run as a script: importing this module (tests) must not read env files.
+  loadPackageEnv(fileURLToPath(new URL('..', import.meta.url)));
   const prisma = new PrismaClient();
   try {
     const result = await seedReferenceData(prisma);

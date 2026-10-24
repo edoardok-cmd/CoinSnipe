@@ -1,8 +1,8 @@
 /**
  * Behavioural checks against a real Postgres. Each run builds its own throwaway schema
- * inside the database named by DATABASE_URL, applies prisma/migrations/0001_init, runs the
- * assertions and drops the schema, so it never touches tables another run created and
- * needs no prior `prisma migrate`.
+ * inside the database named by DATABASE_URL, applies prisma/migrations (all of them, or the
+ * first few for the upgrade and rollback checks), runs the assertions and drops the schema,
+ * so it never touches tables another run created and needs no prior `prisma migrate`.
  *
  * Skipped (with a warning) when DATABASE_URL is unset. Refuses non-local hosts unless
  * CSN_DB_TEST_ALLOW_REMOTE=1, so a pointed-at-Neon URL is never used by accident.
@@ -12,6 +12,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { indexRuleViolations, replayMigrations, type SchemaModel } from './migration-model';
 import { seedReferenceData } from './seed';
 
 const baseUrl = process.env['DATABASE_URL'];
@@ -55,21 +56,27 @@ interface ScratchSchema {
   drop(): Promise<void>;
 }
 
-async function createScratchSchema(url: string): Promise<ScratchSchema> {
+const migrationDirs = readdirSync(migrationsDir, { withFileTypes: true })
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name)
+  .sort();
+
+async function applyMigration(prisma: PrismaClient, dir: string): Promise<void> {
+  const sql = readFileSync(`${migrationsDir}${dir}/migration.sql`, 'utf8');
+  for (const statement of statementsOf(sql)) {
+    await prisma.$executeRawUnsafe(statement);
+  }
+}
+
+/** Build a throwaway schema; `upTo` limits how many migrations are applied (default all). */
+async function createScratchSchema(url: string, upTo?: number): Promise<ScratchSchema> {
   const name = `csn_db_test_${randomBytes(5).toString('hex')}`;
   const scoped = new URL(url);
   scoped.searchParams.set('schema', name);
   const prisma = new PrismaClient({ datasourceUrl: scoped.toString() });
   await prisma.$executeRawUnsafe(`CREATE SCHEMA "${name}"`);
-  const dirs = readdirSync(migrationsDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
-    .sort();
-  for (const dir of dirs) {
-    const sql = readFileSync(`${migrationsDir}${dir}/migration.sql`, 'utf8');
-    for (const statement of statementsOf(sql)) {
-      await prisma.$executeRawUnsafe(statement);
-    }
+  for (const dir of migrationDirs.slice(0, upTo)) {
+    await applyMigration(prisma, dir);
   }
   return {
     name,
@@ -117,24 +124,61 @@ describe.skipIf(!usable)('constraints and data rules (real Postgres)', () => {
     await scratch.drop();
   }, 60_000);
 
-  it('rejects a second job_runs row for the same (job, run_date)', async () => {
+  it('keeps one job_runs row per (job, run_key): daily slot = date, hourly slot = UTC hour', async () => {
     const { prisma } = scratch;
-    const row = (job: string, runDate: Date) => ({
+    const row = (job: string, runDate: Date, runKey: string) => ({
       job,
       runDate,
+      runKey,
       status: 'running',
       startedAt: new Date(),
     });
-    await prisma.jobRun.create({ data: row('prices', day('2026-01-05')) });
+    await prisma.jobRun.create({ data: row('prices', day('2026-01-05'), '2026-01-05') });
+    // The same daily slot again is rejected.
     expect(
       await rejectsWithUniqueViolation(
-        prisma.jobRun.create({ data: row('prices', day('2026-01-05')) }),
+        prisma.jobRun.create({ data: row('prices', day('2026-01-05'), '2026-01-05') }),
       ),
     ).toBe(true);
     // A different job or a different day is allowed.
-    await prisma.jobRun.create({ data: row('scoring', day('2026-01-05')) });
-    await prisma.jobRun.create({ data: row('prices', day('2026-01-06')) });
-    expect(await prisma.jobRun.count()).toBe(3);
+    await prisma.jobRun.create({ data: row('scoring', day('2026-01-05'), '2026-01-05') });
+    await prisma.jobRun.create({ data: row('prices', day('2026-01-06'), '2026-01-06') });
+    // Hourly jobs: several slots on one date, one row per hour.
+    for (const hour of ['00', '01', '23']) {
+      await prisma.jobRun.create({
+        data: row('funding', day('2026-01-05'), `2026-01-05T${hour}`),
+      });
+    }
+    expect(
+      await rejectsWithUniqueViolation(
+        prisma.jobRun.create({ data: row('funding', day('2026-01-05'), '2026-01-05T01') }),
+      ),
+    ).toBe(true);
+    expect(await prisma.jobRun.count()).toBe(6);
+    // details defaults to an empty JSON object.
+    const stored = await prisma.jobRun.findFirst({ where: { job: 'funding' } });
+    expect(stored?.details).toEqual({});
+  });
+
+  it('claims a job_runs slot idempotently: skip when a success row exists, retry after failure', async () => {
+    const { prisma } = scratch;
+    // The claim CSN-027 documents in the README: zero rows returned means skip the slot.
+    const claim = async (runKey: string) =>
+      prisma.$queryRaw<{ id: bigint }[]>`
+        INSERT INTO job_runs (job, run_date, run_key, status, started_at)
+        VALUES ('claim-job', ${day(runKey.slice(0, 10))}, ${runKey}, 'running', now())
+        ON CONFLICT (job, run_key) DO UPDATE
+          SET status = 'running', started_at = now(), finished_at = NULL, error = NULL
+          WHERE job_runs.status <> 'success'
+        RETURNING id`;
+    expect(await claim('2026-03-01T05')).toHaveLength(1); // first run claims the slot
+    expect(await claim('2026-03-01T05')).toHaveLength(1); // still running or crashed: re-claim
+    await prisma.$executeRaw`UPDATE job_runs SET status = 'failed', error = 'boom' WHERE job = 'claim-job'`;
+    expect(await claim('2026-03-01T05')).toHaveLength(1); // retry after failure
+    await prisma.$executeRaw`UPDATE job_runs SET status = 'success', finished_at = now(), details = '{"warnings":["drift"]}' WHERE job = 'claim-job'`;
+    expect(await claim('2026-03-01T05')).toHaveLength(0); // success: skip
+    expect(await claim('2026-03-01T06')).toHaveLength(1); // the next hourly slot is free
+    expect(await prisma.jobRun.count({ where: { job: 'claim-job' } })).toBe(2);
   });
 
   it('rejects a second stripe_events row with the same event_id', async () => {
@@ -440,6 +484,84 @@ const CHECK_CASES: readonly CheckCase[] = [
     ],
     good: `INSERT INTO quick_checks (lesson_id, position, question, options, correct_index) VALUES ('l-1', 4, 'q', '["a","b"]', 1)`,
   },
+  // Added by 0002_schema_v1_1.
+  {
+    constraint: 'job_runs_status_check',
+    bad: [
+      `INSERT INTO job_runs (job, run_date, run_key, status, started_at) VALUES ('j-status', '2026-01-05', '2026-01-05', 'succeeded', now())`,
+      `INSERT INTO job_runs (job, run_date, run_key, status, started_at) VALUES ('j-status', '2026-01-05', '2026-01-05', '', now())`,
+    ],
+    good: `INSERT INTO job_runs (job, run_date, run_key, status, started_at) VALUES ('j-status', '2026-01-05', '2026-01-05', 'success', now())`,
+  },
+  {
+    constraint: 'job_runs_run_key_check',
+    bad: [
+      // the key must start with run_date
+      `INSERT INTO job_runs (job, run_date, run_key, status, started_at) VALUES ('j-key', '2026-01-06', '2026-01-05', 'running', now())`,
+      // hour out of range, bad shape
+      `INSERT INTO job_runs (job, run_date, run_key, status, started_at) VALUES ('j-key', '2026-01-05', '2026-01-05T24', 'running', now())`,
+      `INSERT INTO job_runs (job, run_date, run_key, status, started_at) VALUES ('j-key', '2026-01-05', '2026-01-05T7', 'running', now())`,
+      `INSERT INTO job_runs (job, run_date, run_key, status, started_at) VALUES ('j-key', '2026-01-05', 'daily', 'running', now())`,
+    ],
+    good: `INSERT INTO job_runs (job, run_date, run_key, status, started_at) VALUES ('j-key', '2026-01-05', '2026-01-05T23', 'running', now())`,
+  },
+  {
+    constraint: 'job_runs_details_check',
+    bad: [
+      `INSERT INTO job_runs (job, run_date, run_key, status, started_at, details) VALUES ('j-details', '2026-01-05', '2026-01-05', 'running', now(), '[]')`,
+      `INSERT INTO job_runs (job, run_date, run_key, status, started_at, details) VALUES ('j-details', '2026-01-05', '2026-01-05', 'running', now(), '"text"')`,
+    ],
+    good: `INSERT INTO job_runs (job, run_date, run_key, status, started_at, details) VALUES ('j-details', '2026-01-05', '2026-01-05', 'running', now(), '{"added":["a"]}')`,
+  },
+  {
+    constraint: 'notification_prefs_quiet_hours_check',
+    bad: [
+      `INSERT INTO notification_prefs (user_id, quiet_hours_start) VALUES ('u-1', 24)`,
+      `INSERT INTO notification_prefs (user_id, quiet_hours_end) VALUES ('u-1', -1)`,
+    ],
+    good: `INSERT INTO notification_prefs (user_id, quiet_hours_start, quiet_hours_end) VALUES ('u-1', 23, 0)`,
+  },
+  {
+    constraint: 'notification_prefs_daily_cap_check',
+    bad: [
+      `INSERT INTO notification_prefs (user_id, daily_cap) VALUES ('u-2', 101)`,
+      `INSERT INTO notification_prefs (user_id, daily_cap) VALUES ('u-2', -1)`,
+    ],
+    good: `INSERT INTO notification_prefs (user_id, daily_cap) VALUES ('u-2', 100)`,
+  },
+  {
+    constraint: 'notification_deliveries_kind_check',
+    bad: [
+      `INSERT INTO notification_deliveries (user_id, channel, kind, dedupe_key, status) VALUES ('u-1', 'push', 'advice', 'k-kind-1', 'pending')`,
+    ],
+    good: `INSERT INTO notification_deliveries (user_id, channel, kind, dedupe_key, status) VALUES ('u-1', 'push', 'briefing', 'k-kind-2', 'pending')`,
+  },
+  {
+    constraint: 'notification_deliveries_status_check',
+    bad: [
+      `INSERT INTO notification_deliveries (user_id, channel, kind, dedupe_key, status) VALUES ('u-1', 'push', 'signal', 'k-status-1', 'delivered')`,
+    ],
+    good: `INSERT INTO notification_deliveries (user_id, channel, kind, dedupe_key, status) VALUES ('u-1', 'push', 'signal', 'k-status-2', 'batched')`,
+  },
+  {
+    constraint: 'notification_deliveries_sent_at_check',
+    bad: [
+      // sent without a time, and a time without being sent
+      `INSERT INTO notification_deliveries (user_id, channel, kind, dedupe_key, status) VALUES ('u-1', 'email', 'signal', 'k-sent-1', 'sent')`,
+      `INSERT INTO notification_deliveries (user_id, channel, kind, dedupe_key, status, sent_at) VALUES ('u-1', 'email', 'signal', 'k-sent-2', 'pending', now())`,
+    ],
+    good: `INSERT INTO notification_deliveries (user_id, channel, kind, dedupe_key, status, sent_at) VALUES ('u-1', 'email', 'signal', 'k-sent-3', 'sent', now())`,
+  },
+  {
+    constraint: 'quick_checks_option_explanations_check',
+    bad: [
+      // one entry short, not an array
+      `INSERT INTO quick_checks (lesson_id, position, question, options, correct_index, option_explanations) VALUES ('l-1', 5, 'q', '["a","b"]', 0, '["only one"]')`,
+      `INSERT INTO quick_checks (lesson_id, position, question, options, correct_index, option_explanations) VALUES ('l-1', 6, 'q', '["a","b"]', 0, '{"0":"x","1":"y"}')`,
+      `INSERT INTO quick_checks (lesson_id, position, question, options, correct_index, option_explanations) VALUES ('l-1', 7, 'q', '["a","b"]', 0, '["x","y","z"]')`,
+    ],
+    good: `INSERT INTO quick_checks (lesson_id, position, question, options, correct_index, option_explanations) VALUES ('l-1', 8, 'q', '["a","b"]', 0, '["why a","why b"]')`,
+  },
 ];
 
 interface ArrayCase {
@@ -508,10 +630,12 @@ describe.skipIf(!usable)('hand-written migration constraints (real Postgres)', (
     await scratch.drop();
   }, 60_000);
 
-  it('covers every CHECK constraint in the migration', () => {
-    const sql = readFileSync(`${migrationsDir}0001_init/migration.sql`, 'utf8');
-    const declared = [...sql.matchAll(/ADD CONSTRAINT "(\w+)" CHECK/g)].map((match) => match[1]);
-    expect(declared).toHaveLength(13);
+  it('covers every CHECK constraint in every migration', () => {
+    const declared = migrationDirs.flatMap((dir) => {
+      const sql = readFileSync(`${migrationsDir}${dir}/migration.sql`, 'utf8');
+      return [...sql.matchAll(/ADD CONSTRAINT "(\w+)" CHECK/g)].map((match) => match[1]);
+    });
+    expect(declared).toHaveLength(13 + 9); // 0001_init has 13, 0002_schema_v1_1 adds 9
     expect(CHECK_CASES.map((c) => c.constraint).sort()).toEqual([...declared].sort());
   });
 
@@ -586,5 +710,611 @@ describe.skipIf(!usable)('reference seed (real Postgres)', () => {
       );
       expect(Number(rows[0]?.n), table).toBe(0);
     }
+  });
+});
+
+interface CatalogueIndexRow {
+  table_name: string;
+  index_name: string;
+  is_unique: boolean;
+  partial: boolean;
+  method: string;
+  columns: string[];
+}
+
+/** Read the tables, indexes and foreign keys of one schema from the live catalogue. */
+async function catalogueModel(prisma: PrismaClient, schema: string): Promise<SchemaModel> {
+  const columns = await prisma.$queryRaw<{ table_name: string; column_name: string }[]>`
+    SELECT table_name::text AS table_name, column_name::text AS column_name
+    FROM information_schema.columns WHERE table_schema = ${schema}`;
+  const indexes = await prisma.$queryRaw<CatalogueIndexRow[]>`
+    SELECT t.relname::text AS table_name, i.relname::text AS index_name,
+           ix.indisunique AS is_unique, (ix.indpred IS NOT NULL) AS partial,
+           am.amname::text AS method, array_agg(a.attname::text ORDER BY k.ord) AS columns
+    FROM pg_index ix
+    JOIN pg_class t ON t.oid = ix.indrelid
+    JOIN pg_class i ON i.oid = ix.indexrelid
+    JOIN pg_namespace n ON n.oid = t.relnamespace
+    JOIN pg_am am ON am.oid = i.relam
+    CROSS JOIN LATERAL unnest(ix.indkey::int2[]) WITH ORDINALITY AS k(attnum, ord)
+    JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.attnum
+    WHERE n.nspname = ${schema}
+    GROUP BY t.relname, i.relname, ix.indisunique, (ix.indpred IS NOT NULL), am.amname`;
+  const foreignKeys = await prisma.$queryRaw<
+    { name: string; table_name: string; columns: string[] }[]
+  >`
+    SELECT c.conname::text AS name, t.relname::text AS table_name,
+           array_agg(a.attname::text ORDER BY k.ord) AS columns
+    FROM pg_constraint c
+    JOIN pg_class t ON t.oid = c.conrelid
+    JOIN pg_namespace n ON n.oid = t.relnamespace
+    CROSS JOIN LATERAL unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord)
+    JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.attnum
+    WHERE c.contype = 'f' AND n.nspname = ${schema}
+    GROUP BY c.conname, t.relname`;
+  const tables = new Map<string, Set<string>>();
+  for (const row of columns) {
+    const set = tables.get(row.table_name) ?? new Set<string>();
+    set.add(row.column_name);
+    tables.set(row.table_name, set);
+  }
+  return {
+    tables,
+    indexes: indexes.map((row) => ({
+      name: row.index_name,
+      table: row.table_name,
+      columns: row.columns,
+      unique: row.is_unique,
+      partial: row.partial,
+      method: row.method,
+    })),
+    foreignKeys: foreignKeys.map((row) => ({
+      name: row.name,
+      table: row.table_name,
+      columns: row.columns,
+    })),
+  };
+}
+
+/** A schema-name-independent text description of columns, indexes and constraints. */
+async function describeSchema(prisma: PrismaClient, schema: string): Promise<string[]> {
+  const strip = (text: string) => text.split(`"${schema}".`).join('').split(`${schema}.`).join('');
+  const columns = await prisma.$queryRaw<
+    {
+      table_name: string;
+      column_name: string;
+      data_type: string;
+      udt: string;
+      nullable: string;
+      dflt: string | null;
+    }[]
+  >`SELECT table_name::text, column_name::text, data_type::text, udt_name::text AS udt,
+           is_nullable::text AS nullable, column_default::text AS dflt
+    FROM information_schema.columns WHERE table_schema = ${schema}`;
+  const indexes = await prisma.$queryRaw<{ indexdef: string }[]>`
+    SELECT indexdef::text FROM pg_indexes WHERE schemaname = ${schema}`;
+  const constraints = await prisma.$queryRaw<{ def: string; conname: string; relname: string }[]>`
+    SELECT c.conname::text, t.relname::text, pg_get_constraintdef(c.oid) AS def
+    FROM pg_constraint c
+    JOIN pg_class t ON t.oid = c.conrelid
+    JOIN pg_namespace n ON n.oid = t.relnamespace
+    WHERE n.nspname = ${schema}`;
+  return [
+    ...columns.map(
+      (c) =>
+        `column ${c.table_name}.${c.column_name} ${c.data_type}/${c.udt} null=${c.nullable} default=${strip(c.dflt ?? '')}`,
+    ),
+    ...indexes.map((i) => `index ${strip(i.indexdef)}`),
+    ...constraints.map((c) => `constraint ${c.relname}.${c.conname} ${strip(c.def)}`),
+  ].sort();
+}
+
+describe.skipIf(!usable)('schema v1.1 behaviour (real Postgres)', () => {
+  let scratch: ScratchSchema;
+
+  beforeAll(async () => {
+    scratch = await createScratchSchema(baseUrl as string);
+    const { prisma } = scratch;
+    await seedReferenceData(prisma);
+    await prisma.asset.create({
+      data: {
+        id: 'asset-v11',
+        symbol: 'V11',
+        name: 'V11',
+        coingeckoId: 'asset-v11',
+        sectorId: 'gold',
+      },
+    });
+    await prisma.user.createMany({ data: [{ id: 'nu-1' }, { id: 'nu-2' }] });
+  }, 120_000);
+
+  afterAll(async () => {
+    await scratch.drop();
+  }, 60_000);
+
+  it('the live catalogue satisfies the index rules and matches the replayed migrations', async () => {
+    const live = await catalogueModel(scratch.prisma, scratch.name);
+    expect(indexRuleViolations(live)).toEqual([]);
+    const names = live.indexes.map((index) => index.name);
+    expect(names).toContain('scores_daily_date_idx');
+    expect(names).not.toContain('events_calendar_asset_id_date_idx');
+    expect(names).not.toContain('key_levels_asset_id_date_idx');
+    expect(names).not.toContain('job_runs_job_run_date_key');
+    // The static parser used by schema.test.ts must see exactly what Postgres built.
+    const replayed = replayMigrations(
+      migrationDirs.map((dir) => readFileSync(`${migrationsDir}${dir}/migration.sql`, 'utf8')),
+    );
+    expect(names.sort()).toEqual(replayed.indexes.map((index) => index.name).sort());
+    expect([...live.tables.keys()].sort()).toEqual([...replayed.tables.keys()].sort());
+    expect(live.foreignKeys.map((fk) => fk.name).sort()).toEqual(
+      replayed.foreignKeys.map((fk) => fk.name).sort(),
+    );
+    for (const [table, columns] of replayed.tables) {
+      expect([...(live.tables.get(table) ?? [])].sort(), table).toEqual([...columns].sort());
+    }
+  });
+
+  it('serves (asset_id, date) reads on events_calendar and key_levels from the unique index', async () => {
+    const { prisma } = scratch;
+    // 30 coins x 60 days, so (date) alone matches 30 rows and (asset_id, date) matches one.
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO assets (id, symbol, name, coingecko_id, sector_id)
+      SELECT 'v11-' || g, 'S' || g, 'N' || g, 'v11-' || g, 'gold' FROM generate_series(1, 30) g`);
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO events_calendar (date, kind, title, asset_id, as_of, source)
+      SELECT DATE '2026-01-01' + d, 'unlock', 'e', 'v11-' || a, DATE '2026-01-01', 't'
+      FROM generate_series(1, 30) a, generate_series(0, 59) d`);
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO key_levels (asset_id, date, kind, low, high, strength_points, strength_label, model_version)
+      SELECT 'v11-' || a, DATE '2026-01-01' + d, 'support', 1, 2, 1, 'weak', 'v'
+      FROM generate_series(1, 30) a, generate_series(0, 59) d`);
+    await prisma.$executeRawUnsafe('ANALYZE events_calendar');
+    await prisma.$executeRawUnsafe('ANALYZE key_levels');
+    const plan = async (sql: string) =>
+      prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe('SET LOCAL enable_seqscan = off');
+        const rows = await tx.$queryRawUnsafe<Record<string, string>[]>(`EXPLAIN ${sql}`);
+        return rows.map((row) => Object.values(row)[0]).join('\n');
+      });
+    expect(
+      await plan(`SELECT * FROM events_calendar WHERE asset_id = 'v11-7' AND date = '2026-02-10'`),
+    ).toContain('events_calendar_asset_id_date_kind_title_key');
+    expect(
+      await plan(`SELECT * FROM key_levels WHERE asset_id = 'v11-7' AND date = '2026-02-10'`),
+    ).toContain('key_levels_asset_id_date_kind_low_high_key');
+  });
+
+  it('rejects NULL in the 3-step columns and applies the defaults', async () => {
+    const { prisma } = scratch;
+    const cases: [string, string][] = [
+      [
+        'job_runs.run_key',
+        `INSERT INTO job_runs (job, run_date, run_key, status, started_at) VALUES ('nn', '2026-01-05', NULL, 'running', now())`,
+      ],
+      [
+        'job_runs.details',
+        `INSERT INTO job_runs (job, run_date, run_key, status, started_at, details) VALUES ('nn', '2026-01-05', '2026-01-05', 'running', now(), NULL)`,
+      ],
+      [
+        'notification_prefs.quiet_hours_start',
+        `INSERT INTO notification_prefs (user_id, quiet_hours_start) VALUES ('nu-1', NULL)`,
+      ],
+      [
+        'notification_prefs.quiet_hours_end',
+        `INSERT INTO notification_prefs (user_id, quiet_hours_end) VALUES ('nu-1', NULL)`,
+      ],
+      [
+        'notification_prefs.daily_cap',
+        `INSERT INTO notification_prefs (user_id, daily_cap) VALUES ('nu-1', NULL)`,
+      ],
+    ];
+    for (const [column, sql] of cases) {
+      const failure = await failureOf(prisma, sql);
+      expect(failure, column).not.toBeNull();
+      expect(failure, column).toContain('Code: `23502`');
+    }
+    // Defaults, by raw SQL because the Prisma client fills defaults itself: quiet hours 22
+    // to 8, cap 5, no timezone.
+    await prisma.$executeRawUnsafe(`INSERT INTO notification_prefs (user_id) VALUES ('nu-1')`);
+    const prefs = await prisma.$queryRaw<
+      {
+        quiet_hours_start: number;
+        quiet_hours_end: number;
+        daily_cap: number;
+        timezone: string | null;
+      }[]
+    >`SELECT quiet_hours_start, quiet_hours_end, daily_cap, timezone FROM notification_prefs WHERE user_id = 'nu-1'`;
+    expect(prefs).toEqual([
+      { quiet_hours_start: 22, quiet_hours_end: 8, daily_cap: 5, timezone: null },
+    ]);
+    // A new alert has never fired.
+    const alert = await prisma.alert.create({
+      data: { userId: 'nu-1', kind: 'test', channel: 'push' },
+    });
+    expect(alert.lastFiredAt).toBeNull();
+    const fired = await prisma.alert.update({
+      where: { id: alert.id },
+      data: { lastFiredAt: new Date('2026-01-05T10:00:00Z') },
+    });
+    expect(fired.lastFiredAt?.toISOString()).toBe('2026-01-05T10:00:00.000Z');
+  });
+
+  it('records deliveries once per (user, channel, dedupe_key): hourly re-runs cannot double-send', async () => {
+    const { prisma } = scratch;
+    const send = async (userId: string, channel: 'push' | 'email', key: string) =>
+      prisma.$executeRaw`
+        INSERT INTO notification_deliveries (user_id, channel, kind, dedupe_key, status)
+        VALUES (${userId}, ${channel}::alert_channel, 'alert', ${key}, 'pending')
+        ON CONFLICT (user_id, channel, dedupe_key) DO NOTHING`;
+    expect(await send('nu-1', 'push', 'alert:7:2026-10-24T13')).toBe(1); // first run of the hour
+    expect(await send('nu-1', 'push', 'alert:7:2026-10-24T13')).toBe(0); // re-run of the same hour
+    expect(await send('nu-1', 'push', 'alert:7:2026-10-24T14')).toBe(1); // next hour fires again
+    expect(await send('nu-1', 'email', 'alert:7:2026-10-24T13')).toBe(1); // other channel
+    expect(await send('nu-2', 'push', 'alert:7:2026-10-24T13')).toBe(1); // other user
+    expect(
+      await prisma.notificationDelivery.count({ where: { dedupeKey: { startsWith: 'alert:7:' } } }),
+    ).toBe(4);
+    expect(
+      await rejectsWithUniqueViolation(
+        prisma.notificationDelivery.create({
+          data: {
+            userId: 'nu-1',
+            channel: 'push',
+            kind: 'alert',
+            dedupeKey: 'alert:7:2026-10-24T13',
+            status: 'pending',
+          },
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it('counts the per-user daily cap from sent rows and keeps links on delete', async () => {
+    const { prisma } = scratch;
+    const signal = await prisma.signal.create({
+      data: {
+        code: 'SG1',
+        assetId: 'asset-v11',
+        firedAt: new Date('2026-02-01T09:00:00Z'),
+        what: 'w',
+        why: 'y',
+        checkText: 'c',
+        dedupeKey: 'SG1:asset-v11:2026-02-01',
+      },
+    });
+    const sentAt = (hour: number) => new Date(Date.UTC(2026, 1, 1, hour));
+    for (const [index, status] of ['sent', 'sent', 'sent', 'batched', 'pending'].entries()) {
+      await prisma.notificationDelivery.create({
+        data: {
+          userId: 'nu-2',
+          channel: 'push',
+          kind: 'signal',
+          dedupeKey: `cap:${index}`,
+          signalId: index === 0 ? signal.id : null,
+          status,
+          sentAt: status === 'sent' ? sentAt(8 + index) : null,
+        },
+      });
+    }
+    // A digest on the same day does not count towards the realtime cap.
+    await prisma.notificationDelivery.create({
+      data: {
+        userId: 'nu-2',
+        channel: 'email',
+        kind: 'digest',
+        dedupeKey: 'digest:2026-W06',
+        status: 'sent',
+        sentAt: sentAt(7),
+      },
+    });
+    const sentToday = await prisma.notificationDelivery.count({
+      where: {
+        userId: 'nu-2',
+        kind: { in: ['signal', 'alert'] },
+        status: 'sent',
+        sentAt: { gte: sentAt(0), lt: new Date(Date.UTC(2026, 1, 2)) },
+      },
+    });
+    expect(sentToday).toBe(3);
+    // Deleting a signal keeps the delivery row and clears the link; deleting the user removes its rows.
+    await prisma.$executeRaw`DELETE FROM signals WHERE id = ${signal.id}`;
+    const kept = await prisma.notificationDelivery.findUnique({
+      where: { userId_channel_dedupeKey: { userId: 'nu-2', channel: 'push', dedupeKey: 'cap:0' } },
+    });
+    expect(kept?.signalId).toBeNull();
+    await prisma.user.delete({ where: { id: 'nu-2' } });
+    expect(await prisma.notificationDelivery.count({ where: { userId: 'nu-2' } })).toBe(0);
+  });
+
+  it('stores per-answer explanations beside the existing options column', async () => {
+    const { prisma } = scratch;
+    await prisma.lesson.create({
+      data: {
+        id: 'v11-lesson',
+        position: 91,
+        title: 'T',
+        body: {},
+        unit: 'basics',
+        reviewedBy: 'Reviewer',
+        reviewedAt: new Date('2026-02-01T00:00:00Z'),
+      },
+    });
+    const legacy = await prisma.quickCheck.create({
+      data: {
+        lessonId: 'v11-lesson',
+        position: 1,
+        question: 'q',
+        options: ['a', 'b'],
+        correctIndex: 0,
+        explanation: 'overall',
+      },
+    });
+    expect(legacy.optionExplanations).toBeNull(); // existing shape stays valid
+    const rich = await prisma.quickCheck.create({
+      data: {
+        lessonId: 'v11-lesson',
+        position: 2,
+        question: 'q',
+        options: ['a', 'b'],
+        correctIndex: 1,
+        optionExplanations: ['why a', 'why b'],
+      },
+    });
+    expect(rich.optionExplanations).toEqual(['why a', 'why b']);
+    expect((await prisma.lesson.findUnique({ where: { id: 'v11-lesson' } }))?.unit).toBe('basics');
+  });
+
+  it('as-of rule: an in-place restatement keeps the row visible; advancing as_of would drop it', async () => {
+    const { prisma } = scratch;
+    const upsertRestatement = async (close: string, asOf: string) =>
+      prisma.$executeRawUnsafe(`
+        INSERT INTO price_daily (asset_id, date, close, as_of, source)
+        VALUES ('asset-v11', '2026-02-02', ${close}, '${asOf}', 't')
+        ON CONFLICT (asset_id, date) DO UPDATE SET close = EXCLUDED.close, fetched_at = now()`);
+    const known = async (readDate: string) =>
+      prisma.$queryRawUnsafe<{ close: string }[]>(
+        `SELECT close::text FROM price_daily WHERE asset_id = 'asset-v11' AND date <= '${readDate}' AND as_of <= '${readDate}'`,
+      );
+    await upsertRestatement('10', '2026-02-02');
+    await upsertRestatement('11', '2026-02-09'); // restated a week later; the rule leaves as_of alone
+    const row = await prisma.priceDaily.findFirstOrThrow({ where: { assetId: 'asset-v11' } });
+    expect(row.asOf.toISOString().slice(0, 10)).toBe('2026-02-02');
+    expect(await known('2026-02-01')).toEqual([]); // not known yet
+    // From its first as_of on, the row is visible: no hole. The value is the revised one: the bounded leak.
+    expect((await known('2026-02-02'))[0]?.close).toBe('11.000000000000000000');
+    expect((await known('2026-03-01'))[0]?.close).toBe('11.000000000000000000');
+    // The rejected alternative: advancing as_of on the restatement creates a hole at the original date.
+    await prisma.$executeRawUnsafe(
+      `UPDATE price_daily SET as_of = '2026-02-09' WHERE asset_id = 'asset-v11'`,
+    );
+    expect(await known('2026-02-02')).toEqual([]);
+  });
+});
+
+describe.skipIf(!usable)('upgrade 0001 to 0002 over existing rows (real Postgres)', () => {
+  let scratch: ScratchSchema;
+
+  beforeAll(async () => {
+    scratch = await createScratchSchema(baseUrl as string, 1);
+  }, 120_000);
+
+  afterAll(async () => {
+    await scratch.drop();
+  }, 60_000);
+
+  it('preserves rows, normalises job_runs and fills the new columns', async () => {
+    const { prisma } = scratch;
+    const jobs: [string, string, string][] = [
+      ['prices', '2026-01-05', 'succeeded'],
+      ['prices', '2026-01-06', 'running'],
+      ['scoring', '2026-01-05', 'failed'],
+      ['universe', '2026-01-05', 'weird-state'],
+      ['macro', '2026-01-05', ' Completed '],
+      ['news', '2026-01-07', 'started'],
+    ];
+    for (const [job, date, status] of jobs) {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO job_runs (job, run_date, status, started_at, rows, error) VALUES ('${job}', '${date}', '${status}', now(), 7, NULL)`,
+      );
+    }
+    await prisma.$executeRawUnsafe(`INSERT INTO users (id) VALUES ('old-1'), ('old-2')`);
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO notification_prefs (user_id, weekly_digest_email, realtime_push, timezone) VALUES ('old-1', false, true, 'Europe/Sofia'), ('old-2', true, false, NULL)`,
+    );
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO alerts (user_id, kind, params, channel) VALUES ('old-1', 'price', '{"level":1}', 'email')`,
+    );
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO lessons (id, position, title, body, published) VALUES ('old-lesson', 1, 'Old', '{"a":1}', true)`,
+    );
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO quick_checks (lesson_id, position, question, options, correct_index, explanation) VALUES ('old-lesson', 1, 'q', '["x","y"]', 1, 'because')`,
+    );
+
+    await applyMigration(prisma, '0002_schema_v1_1');
+
+    const runs = await prisma.$queryRaw<
+      {
+        job: string;
+        run_date: string;
+        status: string;
+        run_key: string;
+        details: unknown;
+        rows: number;
+      }[]
+    >`SELECT job, to_char(run_date, 'YYYY-MM-DD') AS run_date, status, run_key, details, rows FROM job_runs ORDER BY id`;
+    expect(runs).toHaveLength(6);
+    expect(runs.map((r) => r.status)).toEqual([
+      'success',
+      'running',
+      'failed',
+      'failed',
+      'success',
+      'running',
+    ]);
+    expect(runs.every((r) => r.run_key === r.run_date && r.rows === 7)).toBe(true);
+    expect(runs.map((r) => r.details)).toEqual([
+      { legacy_status: 'succeeded' },
+      {},
+      {},
+      { legacy_status: 'weird-state' },
+      { legacy_status: ' Completed ' },
+      { legacy_status: 'started' },
+    ]);
+    const prefs = await prisma.notificationPref.findMany({ orderBy: { userId: 'asc' } });
+    expect(
+      prefs.map((p) => [
+        p.userId,
+        p.weeklyDigestEmail,
+        p.realtimePush,
+        p.timezone,
+        p.quietHoursStart,
+        p.quietHoursEnd,
+        p.dailyCap,
+      ]),
+    ).toEqual([
+      ['old-1', false, true, 'Europe/Sofia', 22, 8, 5],
+      ['old-2', true, false, null, 22, 8, 5],
+    ]);
+    const alert = await prisma.alert.findFirstOrThrow();
+    expect([alert.kind, alert.params, alert.channel, alert.lastFiredAt]).toEqual([
+      'price',
+      { level: 1 },
+      'email',
+      null,
+    ]);
+    const lesson = await prisma.lesson.findUniqueOrThrow({ where: { id: 'old-lesson' } });
+    expect([
+      lesson.title,
+      lesson.published,
+      lesson.unit,
+      lesson.reviewedBy,
+      lesson.reviewedAt,
+    ]).toEqual(['Old', true, null, null, null]);
+    const check = await prisma.quickCheck.findFirstOrThrow();
+    expect([
+      check.options,
+      check.correctIndex,
+      check.explanation,
+      check.optionExplanations,
+    ]).toEqual([['x', 'y'], 1, 'because', null]);
+    // The new slot key works on the upgraded table.
+    expect(
+      await rejectsWithUniqueViolation(
+        prisma.jobRun.create({
+          data: {
+            job: 'prices',
+            runDate: day('2026-01-05'),
+            runKey: '2026-01-05',
+            status: 'running',
+            startedAt: new Date(),
+          },
+        }),
+      ),
+    ).toBe(true);
+    await prisma.jobRun.create({
+      data: {
+        job: 'prices',
+        runDate: day('2026-01-05'),
+        runKey: '2026-01-05T09',
+        status: 'running',
+        startedAt: new Date(),
+      },
+    });
+  });
+});
+
+describe.skipIf(!usable)('documented rollback of 0002 (real Postgres)', () => {
+  let migrated: ScratchSchema;
+  let baseline: ScratchSchema;
+
+  beforeAll(async () => {
+    migrated = await createScratchSchema(baseUrl as string, 2);
+    baseline = await createScratchSchema(baseUrl as string, 1);
+  }, 120_000);
+
+  afterAll(async () => {
+    await migrated.drop();
+    await baseline.drop();
+  }, 60_000);
+
+  it('reverts a populated 0002 schema to exactly the 0001 schema and keeps older data', async () => {
+    const { prisma } = migrated;
+    await seedReferenceData(prisma);
+    await prisma.user.create({ data: { id: 'rb-1' } });
+    await prisma.notificationPref.create({
+      data: { userId: 'rb-1', dailyCap: 9, quietHoursStart: 20 },
+    });
+    await prisma.alert.create({
+      data: { userId: 'rb-1', kind: 'k', channel: 'push', lastFiredAt: new Date() },
+    });
+    for (const key of ['2026-04-01', '2026-04-01T00', '2026-04-01T01']) {
+      await prisma.jobRun.create({
+        data: {
+          job: 'rb-hourly',
+          runDate: day('2026-04-01'),
+          runKey: key,
+          status: 'success',
+          startedAt: new Date(),
+          details: { w: 1 },
+        },
+      });
+    }
+    await prisma.jobRun.create({
+      data: {
+        job: 'rb-daily',
+        runDate: day('2026-04-01'),
+        runKey: '2026-04-01',
+        status: 'failed',
+        startedAt: new Date(),
+      },
+    });
+    await prisma.notificationDelivery.create({
+      data: {
+        userId: 'rb-1',
+        channel: 'push',
+        kind: 'digest',
+        dedupeKey: 'digest:x',
+        status: 'pending',
+      },
+    });
+    await prisma.lesson.create({
+      data: { id: 'rb-l', position: 1, title: 'T', body: {}, unit: 'basics' },
+    });
+    await prisma.quickCheck.create({
+      data: {
+        lessonId: 'rb-l',
+        position: 1,
+        question: 'q',
+        options: ['a', 'b'],
+        correctIndex: 0,
+        optionExplanations: ['x', 'y'],
+      },
+    });
+
+    const sql = readFileSync(`${migrationsDir}0002_schema_v1_1/migration.sql`, 'utf8');
+    const block = /-- >>> ROLLBACK-SQL\n([\s\S]*?)-- <<< ROLLBACK-SQL/.exec(sql)?.[1] ?? '';
+    const statements = block
+      .split('\n')
+      .filter((line) => line.startsWith('-- | '))
+      .map((line) => line.slice(5).trim().replace(/;$/, ''));
+    expect(statements.length).toBeGreaterThan(10);
+    for (const statement of statements) {
+      await prisma.$executeRawUnsafe(statement);
+    }
+
+    expect(await describeSchema(prisma, migrated.name)).toEqual(
+      await describeSchema(baseline.prisma, baseline.name),
+    );
+    // What the header says it keeps: daily rows, users, reference data, content, prefs and alerts.
+    const runs = await prisma.$queryRaw<{ job: string }[]>`SELECT job FROM job_runs ORDER BY job`;
+    expect(runs.map((r) => r.job)).toEqual(['rb-daily', 'rb-hourly']);
+    expect(await prisma.sector.count()).toBe(11);
+    expect(await prisma.narrative.count()).toBe(20);
+    expect(await prisma.user.count()).toBe(1);
+    expect(await prisma.lesson.count()).toBe(1);
+    expect(await prisma.quickCheck.count()).toBe(1);
+    expect(await prisma.alert.count()).toBe(1);
+    expect(await prisma.notificationPref.count()).toBe(1);
   });
 });
