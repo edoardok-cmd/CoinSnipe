@@ -1,0 +1,78 @@
+{
+  "_note": "SAMPLE data (common rule 4): the Score Lab v0.3 per-input fixed scales, used only by the golden comparison (DISCREPANCIES.md D-08). A value equal to centre scores 0; unit away from it scores 100. fundingRate: below the 0.03 threshold unit applies, above it aboveUnit. Units are the engine's (percent, not fractions). Never import this from src/.",
+  "scales": {
+    "btcVs200dma": {
+      "centre": 0,
+      "unit": 20
+    },
+    "btcSlope50dma": {
+      "centre": 0,
+      "unit": 5
+    },
+    "stablecoinSupplyChange30d": {
+      "centre": 0,
+      "unit": 4
+    },
+    "fundingRate": {
+      "centre": 0,
+      "unit": 0.03333333333333333,
+      "aboveUnit": 0.03
+    },
+    "openInterestChange30d": {
+      "centre": 0,
+      "unit": 20
+    },
+    "fearGreed": {
+      "centre": 50,
+      "unit": 50
+    },
+    "nasdaqVs50dma": {
+      "centre": 0,
+      "unit": 5
+    },
+    "spxVs50dma": {
+      "centre": 0,
+      "unit": 5
+    },
+    "vix": {
+      "centre": 20,
+      "unit": 10
+    },
+    "btcDominanceChange30d": {
+      "centre": 0,
+      "unit": 2
+    },
+    "dollarIndexChange30d": {
+      "centre": 0,
+      "unit": 3
+    },
+    "us10yChange30d": {
+      "centre": 0,
+      "unit": 0.4
+    },
+    "wtiChange30d": {
+      "centre": 0,
+      "unit": 15
+    },
+    "goldChange30d": {
+      "centre": 0,
+      "unit": 5
+    },
+    "globalM2Change3m": {
+      "centre": 0.5,
+      "unit": 1.5
+    },
+    "globalM2ChangeYoY": {
+      "centre": 3,
+      "unit": 4
+    },
+    "geopoliticalRisk": {
+      "centre": 100,
+      "unit": 50
+    },
+    "ethBtcChange30d": {
+      "centre": 0,
+      "unit": 15
+    }
+  }
+}

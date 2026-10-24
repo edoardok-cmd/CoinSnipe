@@ -20,25 +20,28 @@ re-measure:
 
 ## Summary
 
-| ID   | Topic                                    | Engine default         | Lab setting (config)               | Read today? | Blocks the +-1 / exact-label golden? |
-| ---- | ---------------------------------------- | ---------------------- | ---------------------------------- | ----------- | ------------------------------------ |
-| D-01 | Winsorising at 5th/95th percentile       | winsorise              | `normalization.winsorPct: null`    | yes         | labels only: 1 coin flips label      |
-| D-02 | M1 and R6: ranked or fixed scale         | ranked (plan)          | `metricSpec.M1/R6.better: "fixed"` | yes         | **yes**, almost every coin           |
-| D-03 | ADX (M6) definition                      | Wilder ADX             | `indicators.variant: "lab"`        | not yet     | **yes**, up to 7 coins               |
-| D-04 | ATR (H2, 5.4 zones) definition           | Wilder ATR, true range | `indicators.variant: "lab"`        | not yet     | **yes**, 1 coin                      |
-| D-05 | RSI (H1) warm-up window                  | full history           | `indicators.variant: "lab"`        | not yet     | **yes** on Long, 2 coins             |
-| D-06 | Log vs simple returns (R1, beta for S1)  | log (board text)       | `indicators.returns: "simple"`     | not yet     | no                                   |
-| D-07 | Which metrics use weekly candles on Long | H1 only (as the Lab)   | `candles.horizonCandleIds`         | not yet     | no (default matches the Lab)         |
+| ID   | Topic                                    | Engine default            | Lab setting (config)                   | Read today? | Blocks the +-1 / exact-label golden? |
+| ---- | ---------------------------------------- | ------------------------- | -------------------------------------- | ----------- | ------------------------------------ |
+| D-01 | Winsorising at 5th/95th percentile       | winsorise                 | `normalization.winsorPct: null`        | yes         | labels only: 1 coin flips label      |
+| D-02 | M1 and R6: ranked or fixed scale         | ranked (plan)             | `metricSpec.M1/R6.better: "fixed"`     | yes         | **yes**, almost every coin           |
+| D-03 | ADX (M6) definition                      | Wilder ADX                | `indicators.variant: "lab"`            | not yet     | **yes**, up to 7 coins               |
+| D-04 | ATR (H2, 5.4 zones) definition           | Wilder ATR, true range    | `indicators.variant: "lab"`            | not yet     | **yes**, 1 coin                      |
+| D-05 | RSI (H1) warm-up window                  | full history              | `indicators.variant: "lab"`            | not yet     | **yes** on Long, 2 coins             |
+| D-06 | Log vs simple returns (R1, beta for S1)  | log (board text)          | `indicators.returns: "simple"`         | partly      | no                                   |
+| D-07 | Which metrics use weekly candles on Long | H1 only (as the Lab)      | `candles.horizonCandleIds`             | not yet     | no (default matches the Lab)         |
+| D-08 | Level A sub-score scale (5.1, 5.2)       | z-score vs 1-year history | `levelA.subScore.method: "fixedScale"` | yes         | **yes**, every macro input           |
 
 "Read today?" means whether any code in `src/` reads that key yet. normalize.ts reads the D-01
 and D-02 settings now. The `indicators` and `candles` keys are validated but nothing reads them
 until CSN-033, CSN-035 and CSN-036 wire them (see "Config keys not yet consumed" below), so today
-`indicators.variant: "lab"` changes no output.
+`indicators.variant: "lab"` changes no output. The Level A settings (D-08 and the notes below it)
+are read by `src/levelA/` from CSN-031 on.
 
 **The +-1-point golden target is not reachable with the engine defaults** (D-02 to D-05, plus
-D-01 for exact labels). CSN-031 to CSN-038 should run the golden comparison with
-`test/oracle/labCompat.ts` (`labCompatConfig()`, which sets exactly the settings above) and pin the
-master-plan behaviour with their own unit tests. If the user sides with the Lab on an item, change
+D-01 for exact labels, and D-08 for market weather and alt season). CSN-031 to CSN-038 should run
+the golden comparison with `test/oracle/labCompat.ts` (`labCompatConfig()`, which sets exactly the
+settings above) and pin the master-plan behaviour with their own unit tests. Level A adds
+`test/oracle/labLevelACompat.ts` (`labLevelACompatConfig()`: `labCompatConfig()` plus D-08). If the user sides with the Lab on an item, change
 the default in `model-config.v0.3.json` instead.
 
 ## D-01 Winsorising (master plan 7.1)
@@ -151,7 +154,9 @@ the default in `model-config.v0.3.json` instead.
   minus 1), for both volatility and beta.
 - **Impact:** R1 differs by a median of 0.6% (max 2.8%) and beta by 0.5% (max 3.9%). Quality max
   |Δ| 0.21, Timing 0.10, combined 0.15. No coin moves beyond 1 point and no label flips.
-- **Engine:** log returns (`indicators.returns: "log"`), annualised with sqrt(365).
+- **Engine:** log returns (`indicators.returns: "log"`), annualised with sqrt(365). Today only the
+  Level A macro-scaling correlation reads the key (log or simple changes that correlation by a
+  hair and so the macro weights); R1 and the beta in S1 will read it in CSN-035 and CSN-036.
 - **Question:** Confirm log returns (recommended).
 
 ## D-07 Weekly candles on the Long horizon: which metrics (master plan 7.3)
@@ -168,6 +173,76 @@ the default in `model-config.v0.3.json` instead.
   (`resampleCandles`, `sampleEvery`).
 - **Question:** On Long, should M6 (ADX) and H2 / H4 also use weekly candles?
 
+## D-08 Level A sub-score scale (master plan 5.1, 5.2; CSN-031)
+
+- **Master plan 5.1:** "Each input becomes a sub-score from -100 to +100 (clamped against its own
+  1-year history), then a weighted sum." The CSN-031 brief reads this as either the value's
+  position between the 1-year minimum and maximum, or a z-score clipped to +-2 and scaled x50, and
+  asks for whichever the Lab uses.
+- **Lab (lines 423-431, 450-451):** neither. Every input is divided by its own fixed constant and
+  clamped to +-100, about a neutral point that is 0 for most inputs and differs for a few (Fear &
+  Greed, VIX, GPR, the two M2 changes). The sample has no 1-year macro history, so the Lab could not have used one. C2 and C3
+  use the same idea with their own constants. The constants are not in `src/` or the model config: they sit
+  only in the fixture `test/oracle/__fixtures__/SAMPLE_labLevelAScale.v0.3.json`.
+- **Impact:** Market weather and alt season cannot be reproduced from the plan text on the golden:
+  the golden carries one scalar per macro input and no history. Only A1 (from the golden's 1500
+  days of BTC closes) can be compared: today A1 is 100 under the Lab, 100 under the z-score
+  method and 89.6 under min-max; a week earlier 100, 100 and 85.7. A1's BTC-vs-200D-average and
+  50D-slope readings are both far above their own 1-year range in the sample, so the z-score
+  clips them, as the Lab's constants do. Nothing else could be measured.
+- **Engine:** `levelA.subScore.method` is one of three, all of the form
+  `direction x clamp((value - centre) / unit x 100, -100, +100)`:
+  - `zscore` (default): centre = 1-year mean, unit = `zClip` (2) x the sample standard deviation,
+    i.e. exactly "z clipped to +-2, x50". This is the reading closest to the Lab, whose fixed
+    constant plays the part of "two standard deviations".
+  - `minmax`: centre = mid-range, unit = half the range, i.e. the position between min and max.
+  - `fixedScale`: the Lab's constants. They are **not** in `model-config.v0.3.json` (the table is
+    null there, and the schema refuses `fixedScale` without a complete one). They live in
+    that SAMPLE_ fixture, loaded by `test/oracle/labLevelACompat.ts`, which is how the golden comparison reaches the Lab to
+    floating-point noise (max difference about 1e-14 on the scores).
+  - History is the measure's value on each of the `historyDays` (365) days before asOf, at least
+    `minHistory` (10) of them; a measure without enough history is dropped and the input
+    reweighted (it is listed as `noHistory`). A natural neutral point overrides the centre: GPR
+    uses the plan's baseline of 100 (`levelA.market.gprBaseline`).
+- **Question:** (a) z-score (recommended), min-max, or keep the Lab's fixed constants for launch?
+  (b) With monthly series (M2, GPR) the 1-year history is 12 points; is `minHistory` 10 acceptable?
+  The backtest (CSN-040) should compare the three.
+
+### Related Level A choices (no contradiction with the plan, but the plan is silent or the Lab differs)
+
+- **Weights inside an input (A3, A4, A6, A7).** The plan gives the split only for A1 (40/30/30),
+  A8 (60/40) and A9 (50/50). For the rest the engine takes the Lab's: A3 funding 30, open interest
+  30, Fear & Greed 40; A4 Nasdaq 35, S&P 35, VIX 30; A6 dollar 60, yield 40; A7 oil 70, gold 30.
+  All sit in `levelA.market.parts`. Question: keep the Lab's splits?
+- **A8 lag.** The plan says crypto follows M2 by about 10 weeks. The Lab ignores this (it uses the
+  M2 values as given). The engine, given an M2 level series, uses the observation at or before
+  asOf minus `levelA.market.m2LagDays` (70) and computes the 3-month and yearly change from it.
+  Pre-computed changes are used as given (the data layer owns the lag then). An observation more
+  than 45 days away from the date it should stand for is treated as absent (not a model
+  parameter; M2 is monthly).
+- **A3 funding "inverted above 0.03% per 8h".** Up to the threshold a higher rate scores higher;
+  above it, the excess over 0.03 scores negative on the same scale (the Lab does the same, with
+  its own unit of 0.03). The plan's "above" is strict, so exactly 0.03 stays on the first branch
+  (the Lab puts it on the second, scoring 0). The score jumps at the threshold, as in the Lab.
+- **A9 "unconfirmed speculation scores 0".** The tone is the mean over the regulation headlines
+  with an unconfirmed one counting as 0 (it still counts as a headline). An explicit tone from the
+  data layer wins over headlines. The Lab takes the tone as a given number.
+- **Macro scaling.** Correlation is floored at `market.corrFloor` and capped at 1 (the Lab
+  floors only). The freed weight goes to the present inputs of A1-A3 pro rata to their weights;
+  if none is present it is dropped and the rest rescaled. The engine computes the 90-day
+  correlation of daily returns from aligned BTC and Nasdaq closes (`indicators.correlationDays`,
+  `indicators.returns`) when it is not supplied. With no correlation at all the plan weights stay
+  (`levelA.market.corrMissing: "none"`; `"floor"` applies the floor instead).
+- **Missing inputs.** The Lab has no such case. The engine drops the input and rescales the others
+  to 100 (listed in `missingInputs`); a partly-missing input is reweighted inside (`partial`).
+- **C1 stablecoins.** The plan says "excluding gold tokens"; the brief adds stablecoins. The Lab
+  excludes only Bitcoin and the gold tokens (`cycle.dex`), and the sample has no stablecoin, so
+  the golden is unaffected. The engine also drops the symbols in `levelA.cycle.stablecoins` and
+  any coin flagged `isStablecoin`; excluded coins do not use up a top-50 place. Alts without a
+  90-day return are not counted either way.
+- **A10.** Flag only. "Large" unlock = at least `levelA.market.events.largeUnlockPct` (1) percent
+  of supply (the SG7 text uses 1%); an unlock of unknown size is not called large.
+
 ## Config keys not yet consumed (contract)
 
 `PENDING_CONFIG_KEYS` in `src/config/schema.ts` lists every `indicators.*` and `candles.*` key
@@ -183,12 +258,13 @@ consuming task removes its entries when it wires them.
 | `indicators.adxPeriod`, `upDownVolumeDays`                       | CSN-036 (M6, M7)                          |
 | `indicators.bollingerPeriod`, `bollingerK`                       | CSN-036 (H4)                              |
 | `indicators.betaDays`                                            | CSN-036 (beta in S1)                      |
-| `indicators.returns`                                             | CSN-035 (R1), CSN-036 (beta in S1)        |
 | `indicators.annualisationDays`, `volatilityDays`, `drawdownDays` | CSN-035 (R1, R2)                          |
-| `indicators.correlationDays`                                     | CSN-031 (5.1 macro scaling)               |
 | `indicators.pivotBars`                                           | CSN-033 (K1)                              |
 | `candles.short`, `medium`, `long`, `horizonCandleIds`            | CSN-036 (H1 on the horizon's candles)     |
 | `candles.weeklyBars`                                             | CSN-036 (weekly RSI), CSN-033 (K1 weekly) |
+
+Already read by Level A (CSN-031), so not in the table: `indicators.correlationDays` and
+`indicators.returns` (the macro-scaling correlation). CSN-035 and CSN-036 will read `returns` too.
 
 Precedence: `indicators.variant` picks the implementation of RSI, ATR and ADX. The Lab ports have
 fixed windows, so `variant: "lab"` requires `rsiWarmupBars: null` (enforced by the schema). The
@@ -225,10 +301,7 @@ period keys apply to both variants. `returns` and the `candles` keys are indepen
 
 ## Noticed outside CSN-030's scope (not measured; the owner task should confirm, measure and record)
 
-- **5.1 (CSN-031):** the plan says each input is "clamped against its own 1-year history". The Lab
-  scales each input by a fixed constant instead (lines 423-431; for example, the stablecoin-supply
-  change is divided by a fixed 4% before clamping), and its sample has no 1-year macro history.
-  Following the plan text would make the Market-weather golden unreachable.
+- **5.1 (CSN-031):** recorded and handled as D-08 above.
 - **5.3 (CSN-032):** the plan builds Regime from "A1 Bitcoin trend + price vs 200-week MA". The
   Lab's regime rule (line 675) uses the 200D MA and the 50D slope only. The plan wants base rates
   for 9 Regime x Fuel states, but the Lab computes them by regime alone (line 690, marked there as

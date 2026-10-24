@@ -81,6 +81,62 @@ export const GROWTH_METRIC_IDS = ['U1', 'U2', 'U3', 'E3'] as const satisfies rea
 export const MARKET_WEIGHT_IDS = ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9'] as const;
 export type MarketWeightId = (typeof MARKET_WEIGHT_IDS)[number];
 
+/**
+ * The measures behind each Level A input (CSN-031). One input can combine several measures with
+ * their own weights inside the input (config `levelA.market.parts`); the keys name the raw value
+ * the data layer supplies, so "How we scored it" can show them one by one.
+ */
+export const MARKET_MEASURES = {
+  A1: ['btcVs200dma', 'btcSlope50dma', 'btcMaStack'],
+  A2: ['stablecoinSupplyChange30d'],
+  A3: ['fundingRate', 'openInterestChange30d', 'fearGreed'],
+  A4: ['nasdaqVs50dma', 'spxVs50dma', 'vix'],
+  A5: ['btcDominanceChange30d'],
+  A6: ['dollarIndexChange30d', 'us10yChange30d'],
+  A7: ['wtiChange30d', 'goldChange30d'],
+  A8: ['globalM2Change3m', 'globalM2ChangeYoY'],
+  A9: ['regulationTone', 'geopoliticalRisk'],
+} as const satisfies Record<MarketWeightId, readonly string[]>;
+export type MarketMeasureKey = (typeof MARKET_MEASURES)[MarketWeightId][number];
+
+/** Measures behind the alt-season inputs C2 and C3 (C1 is a share of coins, not a measure). */
+export const CYCLE_MEASURES = ['btcDominanceChange30d', 'ethBtcChange30d'] as const;
+export type CycleMeasureKey = (typeof CYCLE_MEASURES)[number];
+
+/**
+ * Measures that are scaled against their own history. Two are rule-based and need no scale:
+ * the A1 moving-average stack (points) and the A9 regulation tone (already -100..+100).
+ */
+export const SCALED_MEASURE_KEYS = [
+  'btcVs200dma',
+  'btcSlope50dma',
+  'stablecoinSupplyChange30d',
+  'fundingRate',
+  'openInterestChange30d',
+  'fearGreed',
+  'nasdaqVs50dma',
+  'spxVs50dma',
+  'vix',
+  'btcDominanceChange30d',
+  'dollarIndexChange30d',
+  'us10yChange30d',
+  'wtiChange30d',
+  'goldChange30d',
+  'globalM2Change3m',
+  'globalM2ChangeYoY',
+  'geopoliticalRisk',
+  'ethBtcChange30d',
+] as const satisfies readonly (MarketMeasureKey | CycleMeasureKey)[];
+export type ScaledMeasureKey = (typeof SCALED_MEASURE_KEYS)[number];
+
+/** How a raw value becomes a sub-score (config `levelA.subScore.method`, DISCREPANCIES D-08). */
+export const SUB_SCORE_METHODS = ['zscore', 'minmax', 'fixedScale'] as const;
+export type SubScoreMethod = (typeof SUB_SCORE_METHODS)[number];
+
+/** Level A alt-season inputs (master plan 5.2). */
+export const CYCLE_IDS = ['C1', 'C2', 'C3'] as const;
+export type CycleInputId = (typeof CYCLE_IDS)[number];
+
 /** Level B sector-pulse inputs. */
 export const SECTOR_IDS = ['B1', 'B2', 'B3', 'B4', 'B5'] as const;
 export type SectorInputId = (typeof SECTOR_IDS)[number];
