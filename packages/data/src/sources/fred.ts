@@ -584,7 +584,7 @@ function staleInputs(
   return out;
 }
 
-export type CoinGeckoPlan = 'demo' | 'basic' | 'analyst';
+export type MacroCoinGeckoPlan = 'demo' | 'basic' | 'analyst';
 
 /** Attribution for the A7 gold proxy (CSN-071: one line, linked, not an endorsement). */
 export const COINGECKO_ATTRIBUTION = 'Data provided by CoinGecko. Powered by CoinGecko.';
@@ -592,7 +592,7 @@ export const COINGECKO_URL = 'https://www.coingecko.com';
 
 /** Base URL and auth header for CoinGecko. The key goes in a header, never in the URL. */
 export function coingeckoAccess(
-  plan: CoinGeckoPlan | undefined,
+  plan: MacroCoinGeckoPlan | undefined,
   apiKey: string | undefined,
 ): { baseUrl: string; headers: Record<string, string> } {
   if (!apiKey) return { baseUrl: 'https://api.coingecko.com/api/v3', headers: {} };
@@ -644,7 +644,7 @@ export async function fetchA7GoldProxy(options: {
   readonly config: MacroSourceConfig;
   readonly from: string;
   readonly to: string;
-  readonly plan?: CoinGeckoPlan | undefined;
+  readonly plan?: MacroCoinGeckoPlan | undefined;
   readonly apiKey?: string | undefined;
   readonly fetchImpl: FetchLike;
 }): Promise<MacroFetchResult> {

@@ -37,7 +37,7 @@ import {
   type A10CalendarResult,
   type CalendarKind,
   type CalendarRow,
-  type CoinGeckoPlan,
+  type MacroCoinGeckoPlan,
   fetchA10Calendar,
   fetchA7GoldProxy,
   fetchD3FearGreed,
@@ -255,7 +255,7 @@ export async function runFetchMacro(input: {
 
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
 
-function coinGeckoPlanFrom(value: string | undefined): CoinGeckoPlan | undefined {
+function coinGeckoPlanFrom(value: string | undefined): MacroCoinGeckoPlan | undefined {
   return value === 'demo' || value === 'basic' || value === 'analyst' ? value : undefined;
 }
 
