@@ -37,14 +37,14 @@ describe('marketing components render', () => {
     expect(out).toContain('Invest in crypto?');
     expect(out).toContain('Know what you buy.');
     expect(out).toContain('class="junction"');
-    expect(out).toContain('See top coins');
+    expect(out).toContain('Analyze a portfolio');
     expect(out).toContain('alt="DefiLlama"');
     expect(out).toContain('alt="CoinGecko"');
   });
 
-  it('CoinTabs: four tabs, first selected, coin rows render', () => {
+  it('CoinTabs: three tabs, first selected, coin rows render', () => {
     const out = html(CoinTabs);
-    expect((out.match(/role="tab"/g) ?? []).length).toBe(4);
+    expect((out.match(/role="tab"/g) ?? []).length).toBe(3);
     expect(out).toContain('aria-selected="true"');
     expect(out).toContain('Bitcoin');
     expect(out).toContain('Smart signal');
@@ -77,7 +77,7 @@ describe('marketing components render', () => {
   it('Pricing, Faq, Finale, Footer render their copy', () => {
     expect(html(Pricing)).toContain('$12.99/mo');
     expect((html(Faq).match(/<details/g) ?? []).length).toBe(6);
-    expect(html(Finale)).toContain('Start knowing.');
+    expect(html(Finale)).toContain('Free to start.');
     const footer = html(Footer);
     expect(footer).toContain('educational information only');
     for (const col of ['Product', 'Company', 'Resources', 'Legal']) expect(footer).toContain(col);

@@ -2,7 +2,7 @@
 
 Educational, never advisory. Every number rendered on the page is invented SAMPLE data until CSN-043.
 
-## Compliance: flagged copy (needs the user's yes before either phrase ships)
+## Compliance: flagged copy (placeholders approved by the user 2026-10-25, decision D30)
 
 Neither flagged phrase is in the code. Placeholders are neutral; tests fail if either phrase returns.
 

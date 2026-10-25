@@ -10,7 +10,7 @@ E2E_BASE_URL=http://127.0.0.1:3555 pnpm --filter @coinsnipe/web exec playwright 
 
 | Spec                           | What it pins                                                                                                                                                   |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `marketing.spec.ts`            | CSN-010: console errors, section screenshots (`__screenshots__/`), nav spy, burger, slider, pills, radar                                                       |
+| `marketing.spec.ts`            | CSN-010: console errors, section screenshots (`__screenshots__/`), nav spy, burger, slider, pills                                                              |
 | `marketing-responsive.spec.ts` | CSN-012: at 1440/1024/390 (and 768/901/1100) no sideways scroll, no overlapping siblings or text, no cut-off text, in every page state; the mobile sticky pill |
 | `marketing-a11y.spec.ts`       | CSN-012: axe on every width, measured text contrast (>= 4.5:1 on the rendered backdrops), focus rings, tab order, keyboard, reduced motion, image alt text     |
 

@@ -1,8 +1,7 @@
 import Image from 'next/image';
 import { hero } from '../../content/marketing';
-import { CoinTabs } from './CoinTabs';
 
-/** Hero (section 2) with the coin tabs panel it docks onto (section 3, id "signals"). */
+/** Hero (section 1): headline, sub line, data partners and the two CTAs. */
 export function Hero() {
   return (
     <section className="hero" aria-labelledby="hero-title">
@@ -38,16 +37,13 @@ export function Hero() {
             </a>
           ))}
         </div>
-        <div className="hero-list" id="signals">
-          <div className="junction">
-            <a href={hero.primaryCta.href} className="btn btn-mint">
-              {hero.primaryCta.label}
-            </a>
-            <a href={hero.secondaryCta.href} className="btn btn-glass">
-              {hero.secondaryCta.label}
-            </a>
-          </div>
-          <CoinTabs />
+        <div className="junction">
+          <a href={hero.primaryCta.href} className="btn btn-mint">
+            {hero.primaryCta.label}
+          </a>
+          <a href={hero.secondaryCta.href} className="btn btn-glass">
+            {hero.secondaryCta.label}
+          </a>
         </div>
       </div>
     </section>

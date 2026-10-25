@@ -8,17 +8,19 @@ const VIEWPORTS = [
 ];
 
 // Sections in page order, with the selector to scroll to for each screenshot.
+// Order follows the hub's live page (#site): hero, how, trends, gems, portfolio, signal to decision,
+// spot the moves, pricing, final CTA, questions.
 const SECTIONS: [string, string][] = [
   ['01-hero', 'body'],
-  ['02-coin-tabs', '#signals'],
-  ['03-pillars', '#how'],
-  ['04-signal-to-decision', '#flow-title'],
-  ['05-story-markets', '#trends'],
-  ['06-story-gems', '#gems'],
-  ['07-story-portfolio', '#portfolio'],
+  ['02-pillars', '#how'],
+  ['03-story-markets', '#trends'],
+  ['04-story-gems', '#gems'],
+  ['05-story-portfolio', '#portfolio'],
+  ['06-signal-to-decision', '#flow-title'],
+  ['07-coin-tabs', '#signals'],
   ['08-pricing', '#pricing'],
-  ['09-faq', '#faq'],
-  ['10-final-cta', '#quiz'],
+  ['09-final-cta', '#quiz'],
+  ['10-faq', '#faq'],
   ['11-footer', 'footer'],
 ];
 
@@ -53,29 +55,31 @@ test.describe('marketing page', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/', { waitUntil: 'networkidle' });
     for (const [label, id] of [
-      ['Coin signals', 'signals'],
       ['Trends', 'trends'],
       ['Portfolio', 'portfolio'],
+      ['Coin signals', 'signals'],
       ['Pricing', 'pricing'],
     ]) {
       await page
         .getByRole('navigation', { name: 'Main' })
         .getByRole('link', { name: label! })
         .click();
+      // Wait for the smooth scroll to land: the section top is inside the band under the nav.
       await expect
         .poll(
           async () =>
-            page.evaluate((i) => document.getElementById(i!)!.getBoundingClientRect().top, id),
-          {
-            timeout: 5000,
-          },
+            page.evaluate((i) => {
+              const t = document.getElementById(i!)!.getBoundingClientRect().top;
+              return t > -40 && t < 260;
+            }, id),
+          { timeout: 5000 },
         )
-        .toBeLessThan(260);
+        .toBe(true);
       const top = await page.evaluate(
         (i) => document.getElementById(i!)!.getBoundingClientRect().top,
         id,
       );
-      expect(top).toBeGreaterThan(-40);
+      expect(top).toBeLessThan(260);
       await expect(
         page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: label! }),
       ).toHaveAttribute('aria-current', 'true');
@@ -162,23 +166,9 @@ test.describe('marketing page', () => {
     await check('.sv[data-on="true"] .hold', 4);
   });
 
-  test('radar panel fits at 390 and the niche pills do not collide', async ({ page }) => {
+  test('niche pills do not collide with the sparklines at 390', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/', { waitUntil: 'networkidle' });
-    await page.getByRole('tab', { name: /Portfolio/ }).click();
-    const clipped = await page.evaluate(() => {
-      const panel = document.querySelector<HTMLElement>('.listpanel')!;
-      const pb = panel.getBoundingClientRect();
-      return Array.from(panel.querySelectorAll<HTMLElement>('.radarbox *'))
-        .filter((e) => e.getBoundingClientRect().width > 0)
-        .filter(
-          (e) =>
-            e.getBoundingClientRect().right > pb.right + 1 ||
-            e.getBoundingClientRect().left < pb.left - 1,
-        )
-        .map((e) => e.className || e.tagName);
-    });
-    expect(clipped).toEqual([]);
     await page.getByRole('tab', { name: /Top niches/ }).click();
     const collisions = await page.evaluate(
       () =>
@@ -191,76 +181,6 @@ test.describe('marketing page', () => {
     );
     expect(collisions).toBe(0);
   });
-
-  // CSN-010-FOLLOWUP-3: the sweep must rotate about the radar centre (130,130 of the 260 viewBox),
-  // not the wedge bbox centre, at every width. Motion is enabled; the animation is paused and
-  // seeked so the sampled transform is deterministic.
-  for (const vp of VIEWPORTS) {
-    test(`radar sweep rotates about the radar centre at ${vp.name}`, async ({ browser }) => {
-      const ctx = await browser.newContext({
-        viewport: { width: vp.width, height: vp.height },
-        reducedMotion: 'no-preference',
-      });
-      const page = await ctx.newPage();
-      await page.goto('/', { waitUntil: 'networkidle' });
-      await page.getByRole('tab', { name: /Portfolio/ }).click();
-      const m = await page.evaluate(() => {
-        const g = document.querySelector<SVGGElement>('.radar .sweep')!;
-        const svg = g.ownerSVGElement!;
-        const anims = g.getAnimations();
-        // Screen position of the wedge apex (130,130 in user space) under the g's current transform.
-        const at = (ux: number, uy: number) => {
-          const c = g.getScreenCTM()!;
-          return { x: c.a * ux + c.c * uy + c.e, y: c.b * ux + c.d * uy + c.f };
-        };
-        const apex = () => at(130, 130);
-        // Far end of the wedge's straight edge (130,8): 122 user units from the apex.
-        const tip = () => at(130, 8);
-        const seek = (t: number) => {
-          anims.forEach((a) => {
-            a.pause();
-            a.currentTime = t;
-          });
-          return { apex: apex(), tip: tip() };
-        };
-        const r = svg.getBoundingClientRect();
-        const centre = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-        const times = [0, 500, 1000, 2000, 3000];
-        const all = times.map(seek);
-        const samples = all.map((a) => a.apex);
-        const tips = all.map((a) => a.tip);
-        // At t=0 the angle is 0 and at t=2000 (half of 4s) it is 180deg: the fixed point of the
-        // rotation is the midpoint of the apex positions at those two times.
-        const rotCentre = {
-          x: (samples[0].x + samples[3].x) / 2,
-          y: (samples[0].y + samples[3].y) / 2,
-        };
-        return { animations: anims.length, centre, rotCentre, samples, tips, times, size: r.width };
-      });
-      expect(m.animations).toBeGreaterThan(0);
-      console.log(`radar ${vp.name}`, JSON.stringify(m));
-      expect(Math.abs(m.rotCentre.x - m.centre.x)).toBeLessThan(0.5);
-      expect(Math.abs(m.rotCentre.y - m.centre.y)).toBeLessThan(0.5);
-      for (const s of m.samples) {
-        expect(Math.abs(s.x - m.centre.x)).toBeLessThan(0.5);
-        expect(Math.abs(s.y - m.centre.y)).toBeLessThan(0.5);
-      }
-      // The wedge tip must actually orbit the centre: constant radius (122 user units, scaled),
-      // and an angle that advances 360deg per 4s from the t=0 angle (guards a no-op keyframe).
-      const radius = (m.size / 260) * 122;
-      const angle = (p: { x: number; y: number }) =>
-        (Math.atan2(p.y - m.centre.y, p.x - m.centre.x) * 180) / Math.PI;
-      const a0 = angle(m.tips[0]);
-      m.tips.forEach((t, i) => {
-        expect(Math.abs(Math.hypot(t.x - m.centre.x, t.y - m.centre.y) - radius)).toBeLessThan(0.5);
-        const expected = (360 * m.times[i]) / 4000;
-        const delta = ((((angle(t) - a0 - expected + 540) % 360) + 360) % 360) - 180;
-        expect(Math.abs(delta)).toBeLessThan(1);
-      });
-      expect(Math.abs(angle(m.tips[1]) - a0)).toBeGreaterThan(30);
-      await ctx.close();
-    });
-  }
 
   test('nav highlights Portfolio while the portfolio step is centred', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });

@@ -55,9 +55,13 @@ export function Nav() {
       threshold: [0, 1],
     });
     sentinels.forEach((s) => s && io.observe(s));
+    // The observer only fires when a sentinel crosses the line, so a jump that skips past a
+    // section (an anchor or a scrollTo) would leave the highlight stale. Re-check on every scroll.
+    window.addEventListener('scroll', evaluate, { passive: true });
     evaluate();
     return () => {
       io.disconnect();
+      window.removeEventListener('scroll', evaluate);
       sentinels.forEach((s) => s?.remove());
     };
   }, []);

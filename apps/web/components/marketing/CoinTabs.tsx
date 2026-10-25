@@ -10,19 +10,9 @@ import {
   signalConfig,
 } from '../../content/marketing';
 import type { Momentum } from '../../content/marketing';
-import {
-  BellIcon,
-  Change,
-  CheckIcon,
-  CoinLogo,
-  LockIcon,
-  Sparkline,
-  StarIcon,
-  TabIcons,
-  TemperaturePill,
-} from './ui';
+import { Change, CoinLogo, LockIcon, Sparkline, StarIcon, TabIcons, TemperaturePill } from './ui';
 
-type TabId = 'coins' | 'niches' | 'gems' | 'portfolio';
+type TabId = 'coins' | 'niches' | 'gems';
 
 /** Rows of the three tables are SAMPLE data until CSN-043. The favourite star is local state only. */
 function Star({ label, name }: { label: string; name: string }) {
@@ -243,90 +233,19 @@ function GemsTable() {
   );
 }
 
-function Radar() {
-  const r = coinTabs.radar;
+/** "Spot the moves that matter": section wrapper (id "signals", the nav's Coin signals link). */
+export function CoinTabsSection() {
   return (
-    <div className="radarbox">
-      <div className="radar">
-        <svg viewBox="0 0 260 260" role="img" aria-label="Radar graphic with three sample alerts">
-          <defs>
-            <radialGradient id="radar-fill" cx="50%" cy="50%" r="50%">
-              <stop offset="0" stopColor="#3DF5B4" stopOpacity="0.16" />
-              <stop offset="1" stopColor="#3DF5B4" stopOpacity="0" />
-            </radialGradient>
-            <linearGradient id="radar-sweep" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0" stopColor="#3DF5B4" stopOpacity="0" />
-              <stop offset="1" stopColor="#3DF5B4" stopOpacity="0.5" />
-            </linearGradient>
-          </defs>
-          <circle cx="130" cy="130" r="124" fill="url(#radar-fill)" />
-          {[40, 80, 120].map((rad) => (
-            <circle
-              key={rad}
-              cx="130"
-              cy="130"
-              r={rad}
-              fill="none"
-              stroke="rgba(255,255,255,.1)"
-              strokeWidth="1"
-            />
-          ))}
-          <path d="M130 6v248M6 130h248" stroke="rgba(255,255,255,.07)" strokeWidth="1" />
-          <g className="sweep">
-            <path d="M130 130 L130 8 A122 122 0 0 1 216 44 Z" fill="url(#radar-sweep)" />
-          </g>
-          <circle cx="130" cy="130" r="4" fill="#3DF5B4" />
-          <rect x="176" y="168" width="12" height="12" rx="3" fill="#FF8A5B" />
-          <rect x="72" y="182" width="12" height="12" rx="3" fill="#5CB2F2" />
-          <rect x="88" y="70" width="12" height="12" rx="3" fill="#E7C35A" />
-        </svg>
-        {r.alerts.map((a, i) => {
-          return (
-            <span className={`alert a${i + 1} a-${a.kind}`} key={a.kind}>
-              <BellIcon />
-              {'leadFirst' in a ? (
-                <>
-                  {a.lead}&nbsp;<b style={{ fontWeight: 600 }}>{a.tail}</b>
-                </>
-              ) : (
-                <>
-                  <b style={{ fontWeight: 600 }}>{a.lead}</b>
-                  {a.tail}
-                </>
-              )}
-            </span>
-          );
-        })}
-      </div>
-      <div>
-        <span className="tag-s" style={{ fontSize: 12, padding: '4px 10px' }}>
-          {r.tag}
-        </span>
-        <h2 style={{ fontSize: 'clamp(28px,3vw,38px)', marginTop: 14, lineHeight: 1.1 }}>
-          {r.title}
-        </h2>
-        <p style={{ marginTop: 14, fontSize: 17, color: 'var(--cs-muted)', lineHeight: 1.6 }}>
-          {r.body}
-        </p>
-        <div className="checks">
-          {r.checks.map((c) => (
-            <div key={c}>
-              <CheckIcon />
-              {c}
-            </div>
-          ))}
+    <section className="sec" id="signals" aria-labelledby="moves-title">
+      <div className="wrap">
+        <div className="head">
+          <h2 id="moves-title">{coinTabs.title}</h2>
         </div>
-        <div style={{ display: 'flex', gap: 12, marginTop: 26, flexWrap: 'wrap' }}>
-          <a href={r.primaryCta.href} className="btn btn-mint">
-            {r.primaryCta.label}
-          </a>
-          <a href={r.secondaryCta.href} className="btn btn-glass">
-            {r.secondaryCta.label}
-          </a>
+        <div className="moves-panel">
+          <CoinTabs />
         </div>
-        <p style={{ marginTop: 12, fontSize: 13, color: 'var(--cs-dim)' }}>{r.note}</p>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -371,7 +290,6 @@ export function CoinTabs() {
             >
               <Icon />
               {t.label}
-              {'tag' in t ? <span className="tag-s">{t.tag}</span> : null}
             </button>
           );
         })}
@@ -387,16 +305,13 @@ export function CoinTabs() {
           {tab === 'coins' ? <CoinsTable /> : null}
           {tab === 'niches' ? <NichesTable /> : null}
           {tab === 'gems' ? <GemsTable /> : null}
-          {tab === 'portfolio' ? <Radar /> : null}
         </div>
       </div>
-      {tab !== 'portfolio' ? (
-        <div className="more">
-          <a href={coinTabs.moreHref} className="btn btn-glass">
-            {coinTabs.moreLabels[tab]}
-          </a>
-        </div>
-      ) : null}
+      <div className="more">
+        <a href={coinTabs.moreHref} className="btn btn-glass">
+          {coinTabs.moreLabels[tab]}
+        </a>
+      </div>
     </>
   );
 }

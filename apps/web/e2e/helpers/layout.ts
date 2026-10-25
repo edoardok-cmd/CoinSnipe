@@ -77,9 +77,8 @@ export type OverlapIssue = { parent: string; a: string; b: string; area: number 
  * - invisible boxes (display none, visibility hidden, opacity 0, zero size), e.g. inactive slides
  * - position sticky/fixed boxes (nav, pill, sample badge): they float over content by design
  * - boxes with no text, image, svg or control inside (decorative gradients, grids, glows)
- * - an absolutely positioned box against a sibling svg/img: the radar alerts sit on the radar graphic
- * Everything else, including the absolutely positioned hero "junction" buttons and the radar
- * alerts against each other, must not intersect by more than 1px in both axes.
+ * Everything else, including the absolutely positioned hero "junction" buttons against their
+ * neighbours, must not intersect by more than 1px in both axes.
  */
 export async function siblingOverlaps(page: Page): Promise<OverlapIssue[]> {
   return page.evaluate(() => {

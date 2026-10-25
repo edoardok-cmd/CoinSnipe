@@ -72,9 +72,9 @@ export const nav = {
   openMenuLabel: 'Open menu',
   closeMenuLabel: 'Close menu',
   links: [
-    { label: 'Coin signals', href: '#signals' },
     { label: 'Trends', href: '#trends' },
     { label: 'Portfolio', href: '#portfolio' },
+    { label: 'Coin signals', href: '#signals' },
     { label: 'Pricing', href: '#pricing' },
   ] satisfies SectionLink[],
   /** App routes arrive with CSN-050; '#' keeps the link inert until then. */
@@ -100,11 +100,12 @@ export const stickyCta = {
 export const hero = {
   titleLead: 'Invest in crypto?',
   titleAccent: 'Know what you buy.',
-  subline:
-    'CoinSnipe turns market data, on-chain activity, and narratives into simple signals you can understand at a glance.',
-  primaryCta: { label: 'Start for free', href: '#quiz' },
-  secondaryCta: { label: 'See top coins', href: '#signals' },
-  backedBy: 'Built on open data from',
+  // Hub #site copy: "Simple signals and smart suggestions to help you know what to hold and why."
+  // "hold" is banned in UI copy (CLAUDE.md), so the subline is reworded.
+  subline: 'Simple signals and clear insights to help you understand what you own and why.',
+  primaryCta: { label: 'Build a portfolio – free', href: '#quiz' },
+  secondaryCta: { label: 'Analyze a portfolio', href: '#portfolio' },
+  backedBy: 'Powered by',
   partners: [
     {
       name: 'DefiLlama',
@@ -127,11 +128,11 @@ export const hero = {
 
 export const coinTabs = {
   ariaLabel: 'Browse',
+  title: 'Spot the moves that matter',
   tabs: [
     { id: 'coins', label: 'Top coins' },
     { id: 'niches', label: 'Top niches' },
     { id: 'gems', label: 'Hidden gems' },
-    { id: 'portfolio', label: 'Portfolio', tag: 'Smart signals' },
   ],
   coinsHead: {
     name: 'Name',
@@ -168,33 +169,14 @@ export const coinTabs = {
     cta: 'Unlock with Pro',
     href: '#pricing',
   },
-  radar: {
-    tag: 'Smart signals',
-    title: 'Put your portfolio on radar',
-    body: 'Add your coins and CoinSnipe watches them for you. Get a heads-up the moment one heats up, cools off, loses users or faces a big unlock.',
-    checks: [
-      'Smart signals on every coin you own',
-      'Alerts on your favorites and your portfolio',
-      'Plain-words explanation with every alert',
-    ],
-    primaryCta: { label: 'Add my coins', href: '#portfolio' },
-    secondaryCta: { label: 'How alerts work', href: '#how' },
-    note: 'Free to start. No wallet connection needed.',
-    alerts: [
-      { kind: 'hot', lead: 'Solana', tail: 'turned heated' },
-      { kind: 'cool', lead: 'Chainlink', tail: 'cooled off' },
-      { kind: 'mid', lead: 'Unlock ahead in', tail: '9 days', leadFirst: true },
-    ],
-  },
 } as const;
 
 /* ------------------------------------------------------------------ signal to decision */
 
 export const signalFlow = {
-  titleLead: 'Everything from',
-  titleAccent: 'signal to decision',
-  subline:
-    'See what is heating up, understand why, and keep an eye on what you own. All in one place.',
+  titleLead: 'From signal',
+  titleAccent: 'to decision',
+  subline: 'See what is heating up, understand why, and keep an eye on what you own.',
   sliderLabel: 'Product features',
   slides: [
     { id: 'gems', title: 'Discover gems', body: 'Explore which coins show growing activity.' },
@@ -223,8 +205,8 @@ export const signalFlow = {
 /* ------------------------------------------------------------------ pillars */
 
 export const pillars = {
-  titleLead: 'We read the data.',
-  titleAccent: 'You get the answer.',
+  titleLead: 'Know what matters.',
+  titleAccent: 'Before you invest.',
   items: [
     {
       id: 'adoption',
@@ -251,15 +233,15 @@ export const pillars = {
       height: 400,
     },
   ],
-  cta: { label: 'Check your coins free', href: '#quiz' },
+  cta: { label: 'Check your portfolio, it’s free', href: '#quiz' },
 } as const;
 
 /* ------------------------------------------------------------------ scroll story */
 
 /**
  * Compliance (R-CM / brief "Flagged copy"): the canvas heading "Find winners early" hints at
- * returns and is NOT shipped. `story.gems.title` is a neutral placeholder pending the user's
- * decision. Alternatives are listed in PR_NOTES.md.
+ * returns and is NOT shipped. `story.gems.title` is a neutral placeholder, approved by the user
+ * on 2026-10-25 (decision D30). Alternatives are listed in PR_NOTES.md.
  */
 export const story = {
   markets: {
@@ -285,10 +267,10 @@ export const story = {
   portfolio: {
     id: 'portfolio',
     title: 'Your coins, finally explained',
-    body: 'Add what you own by hand, no wallet connection required. CoinSnipe shows the temperature and season of every coin you own and tells you in plain words when something changes.',
+    body: 'Add your coins by hand. We’ll watch them for you.',
     checks: [
-      'Alerts when one of your coins turns heated or cooled off',
-      'See how much of your portfolio is in season',
+      'Get a plain-word alert when something changes',
+      'See which of your coins are in season',
       'Spot unlocks and fading usage before they surprise you',
     ],
     cta: { label: 'Add my coins', href: '#' },
@@ -302,7 +284,7 @@ export const story = {
 export const pricing = {
   id: 'pricing',
   titleLead: 'Start free.',
-  titleAccent: 'Upgrade when you want more.',
+  titleAccent: 'Unlock more with Pro.',
   free: {
     name: 'Free',
     price: '$0',
@@ -373,17 +355,17 @@ export const faq = {
 
 export const finale = {
   id: 'quiz',
-  titleLead: 'Stop guessing.',
-  titleAccent: 'Start knowing.',
-  primaryCta: { label: 'Start for free now', href: '#' },
-  secondaryCta: { label: 'Take 2 min quiz', href: '#signals' },
+  titleLead: 'Plan your next moves in crypto.',
+  titleAccent: 'Free to start.',
+  primaryCta: { label: 'Build a portfolio – free', href: '#' },
+  secondaryCta: { label: 'Analyze a portfolio', href: '#portfolio' },
 } as const;
 
 /* ------------------------------------------------------------------ footer */
 
 export const footer = {
   tagline:
-    'Signals, narratives and lessons for people who want to understand what the crypto data shows.',
+    'Simple signals and clear insights that make crypto easier to understand, so you know what you own and why.',
   columns: [
     {
       title: 'Product',

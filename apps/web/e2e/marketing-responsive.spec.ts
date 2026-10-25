@@ -38,7 +38,7 @@ type State = { name: string; apply: (page: Page, width: number) => Promise<void>
 /** Every state that changes what is on screen. Each one is laid out and checked. */
 const STATES: State[] = [
   { name: 'default', apply: async () => {} },
-  ...['Top niches', 'Hidden gems', 'Portfolio'].map<State>((label) => ({
+  ...['Top niches', 'Hidden gems'].map<State>((label) => ({
     name: `coin tab: ${label}`,
     apply: async (page) => {
       await page
@@ -56,6 +56,13 @@ const STATES: State[] = [
   ...[0, 1, 2].map<State>((i) => ({
     name: `story card tab ${i + 1}`,
     apply: async (page) => {
+      // The niche tabs live in the trends step; bring that step into view first (the page order is
+      // hero, how, trends, gems, portfolio, signals), so the tabs are rendered and clickable.
+      await page.evaluate(() => {
+        document.documentElement.style.scrollBehavior = 'auto';
+        document.getElementById('trends')!.scrollIntoView({ block: 'center' });
+      });
+      await page.waitForTimeout(300);
       await page.locator('.ntab').nth(i).click();
     },
   })),

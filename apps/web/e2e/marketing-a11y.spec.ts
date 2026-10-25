@@ -118,9 +118,9 @@ async function axeStates(page: Page, width: number) {
   const states: { name: string; run: () => Promise<void> }[] = [
     { name: 'default (top of page)', run: async () => {} },
     {
-      name: 'coin tabs: niches, gems, portfolio',
+      name: 'coin tabs: niches, gems',
       run: async () => {
-        for (const t of ['Top niches', 'Hidden gems', 'Portfolio'])
+        for (const t of ['Top niches', 'Hidden gems'])
           await page
             .getByRole('tab', { name: new RegExp(t) })
             .first()
@@ -268,13 +268,13 @@ for (const vp of WIDTHS) {
     add('page sweep', sweep);
 
     // 2. every state that swaps content
-    for (const tab of ['Top niches', 'Hidden gems', 'Portfolio', 'Top coins']) {
+    for (const tab of ['Top niches', 'Hidden gems', 'Top coins']) {
       const m = new Map<string, Measurement>();
       await page
         .getByRole('tab', { name: new RegExp(tab) })
         .first()
         .click();
-      await measureRegion(page, helper, m, '.hero-list');
+      await measureRegion(page, helper, m, '.moves-panel');
       await jumpToY(page, (await page.evaluate(() => Math.round(window.scrollY))) + 500);
       mergeWorst(m, await measureViewport(page, helper));
       add(`coin tab ${tab}`, m);
@@ -287,6 +287,12 @@ for (const vp of WIDTHS) {
     }
     for (let i = 0; i < 3; i++) {
       const m = new Map<string, Measurement>();
+      // The niche tabs live in the trends step: bring it into view so they are clickable.
+      await page.evaluate(() => {
+        document.documentElement.style.scrollBehavior = 'auto';
+        document.getElementById('trends')!.scrollIntoView({ block: 'center' });
+      });
+      await page.waitForTimeout(300);
       await page.locator('.ntab').nth(i).click();
       await measureRegion(page, helper, m, '#trends');
       add(`story card tab ${i + 1}`, m);
@@ -664,12 +670,16 @@ test('keyboard: coin tabs and story card tabs follow the arrow-key tabs pattern'
   await expect(tab(/Top niches/)).toBeFocused();
   await expect(tab(/Top niches/)).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('End');
-  await expect(tab(/Portfolio/)).toBeFocused();
+  await expect(tab(/Hidden gems/)).toBeFocused();
   await page.keyboard.press('Home');
   await expect(tab(/Top coins/)).toBeFocused();
   await page.keyboard.press('ArrowLeft'); // wraps
-  await expect(tab(/Portfolio/)).toBeFocused();
+  await expect(tab(/Hidden gems/)).toBeFocused();
 
+  // Fresh page for the story tabs: the coin-tab checks above leave focus and scroll in a state
+  // that is not what a visitor arriving at the story would have.
+  // A reload restores the old scroll position, which leaves the story out of view; navigate afresh.
+  await page.goto('/', { waitUntil: 'networkidle' });
   const nt = page.locator('.ntab');
   await nt.nth(0).scrollIntoViewIfNeeded();
   await nt.nth(0).focus();

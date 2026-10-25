@@ -109,27 +109,26 @@ describe('marketing content: brief rules', () => {
     expect(content.signalFlow.titleAccent).not.toMatch(/\.$/);
   });
 
-  it('nav links, in order, match the section anchors', () => {
+  it('nav links, in order, match the section anchors of the hub page', () => {
     expect(content.nav.links.map((l) => l.label)).toEqual([
-      'Coin signals',
       'Trends',
       'Portfolio',
+      'Coin signals',
       'Pricing',
     ]);
     expect(content.nav.links.map((l) => l.href)).toEqual([
-      '#signals',
       '#trends',
       '#portfolio',
+      '#signals',
       '#pricing',
     ]);
   });
 
-  it('lists the four tabs and the four feature cards of the canvas', () => {
+  it('lists the three tabs and the four feature cards of the hub page', () => {
     expect(content.coinTabs.tabs.map((t) => t.label)).toEqual([
       'Top coins',
       'Top niches',
       'Hidden gems',
-      'Portfolio',
     ]);
     expect(content.signalFlow.slides.map((s) => s.title)).toEqual([
       'Discover gems',
