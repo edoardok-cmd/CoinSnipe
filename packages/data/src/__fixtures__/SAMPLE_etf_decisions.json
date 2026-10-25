@@ -1,0 +1,13 @@
+[
+  {
+    "date": "2026-11-03",
+    "title": "SAMPLE spot ETF decision date",
+    "asset_id": "btc",
+    "source": "admin:sample"
+  },
+  {
+    "date": "2026-11-20",
+    "title": "SAMPLE second ETF decision date",
+    "asset_id": null
+  }
+]

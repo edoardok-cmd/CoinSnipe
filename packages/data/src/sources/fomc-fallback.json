@@ -1,0 +1,23 @@
+{
+  "source": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+  "retrieved": "2026-10-24",
+  "note": "Maintained fallback for the FOMC calendar. The scraper in calendar.ts reads the live Fed page first and uses this file only when the page cannot be read or does not parse. decision = the last day of each meeting (statement day). sep = Summary of Economic Projections meeting (asterisk on the Fed page). Update each year when the Fed publishes the next year.",
+  "meetings": [
+    { "start": "2026-01-27", "decision": "2026-01-28", "sep": false },
+    { "start": "2026-03-17", "decision": "2026-03-18", "sep": true },
+    { "start": "2026-04-28", "decision": "2026-04-29", "sep": false },
+    { "start": "2026-06-16", "decision": "2026-06-17", "sep": true },
+    { "start": "2026-07-28", "decision": "2026-07-29", "sep": false },
+    { "start": "2026-09-15", "decision": "2026-09-16", "sep": true },
+    { "start": "2026-10-27", "decision": "2026-10-28", "sep": false },
+    { "start": "2026-12-08", "decision": "2026-12-09", "sep": true },
+    { "start": "2027-01-26", "decision": "2027-01-27", "sep": false },
+    { "start": "2027-03-16", "decision": "2027-03-17", "sep": true },
+    { "start": "2027-04-27", "decision": "2027-04-28", "sep": false },
+    { "start": "2027-06-08", "decision": "2027-06-09", "sep": true },
+    { "start": "2027-07-27", "decision": "2027-07-28", "sep": false },
+    { "start": "2027-09-14", "decision": "2027-09-15", "sep": true },
+    { "start": "2027-10-26", "decision": "2027-10-27", "sep": false },
+    { "start": "2027-12-07", "decision": "2027-12-08", "sep": true }
+  ]
+}
