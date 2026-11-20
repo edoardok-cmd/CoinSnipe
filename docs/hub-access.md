@@ -144,7 +144,7 @@ The hub mirror is refreshed by `.claude/specs/CoinSnipe/hub/sync-hub.py`. That s
   - Secret source: Vercel project, Settings, Deployment Protection, Protection Bypass for Automation.
   - Env var name the sync script would read: `VERCEL_AUTOMATION_BYPASS_SECRET`. It replaces the earlier proposed name `VERCEL_PROTECTION_BYPASS_SECRET`. The value is never written to the repo.
   - Header sent on requests: `x-vercel-protection-bypass`.
-  - Provenance: the name and header are as read in Vercel's public automation-bypass docs (https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/protection-bypass-automation) during review on 2026-11-20. The user should confirm both in the dashboard before relying on them.
+  - Provenance: the name and header are as read in Vercel's public automation-bypass docs (https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/protection-bypass-automation) during review on 2026-11-20. The user should confirm both in the dashboard before relying on them. `VERCEL_AUTOMATION_BYPASS_SECRET` is the name Vercel's docs give to the secret it sets inside deployments; the local env var named here is a convention for the sync script, not a Vercel requirement.
   - Status: **not configured**.
 
 `.env.example` is not changed, by decision. The CoinSnipe app does not read the hub, and the sync script lives in the harness, so listing the variable in this repo would mislead readers.
