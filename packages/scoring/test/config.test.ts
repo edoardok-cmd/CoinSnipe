@@ -78,6 +78,14 @@ describe('model-config.v0.3.json', () => {
         expect(rest).toEqual(labCfg.metrics);
         continue;
       }
+      if (key === 'levels') {
+        // CSN-033 adds tunables the Lab hard-codes (K2 bins, K3 windows, K4 steps, K5 top N);
+        // the seven Lab keys must still match exactly.
+        const l = ours.levels as Json;
+        const lab = labCfg.levels as Json;
+        expect(Object.fromEntries(Object.keys(lab).map((k) => [k, l[k]]))).toEqual(lab);
+        continue;
+      }
       expect(ours[key], key).toEqual(labCfg[key]);
     }
   });
@@ -268,8 +276,14 @@ describe('config schema rejects bad input', () => {
 
 describe('indicators and candles: contract until a consumer wires them (PENDING_CONFIG_KEYS)', () => {
   // Keys a task has wired and removed from PENDING_CONFIG_KEYS, with the code that reads them.
-  // CSN-031: levelA/marketWeather.ts (macro scaling). `returns` is also read by CSN-035/036 later.
-  const WIRED = ['indicators.correlationDays', 'indicators.returns'];
+  // CSN-033: levels/*.ts (K1 pivotBars, atrPeriod for zone merging, weeklyBars). CSN-031: levelA/marketWeather.ts (macro scaling). `returns` is also read by CSN-035/036 later.
+  const WIRED = [
+    'indicators.correlationDays',
+    'indicators.returns',
+    'indicators.pivotBars',
+    'indicators.atrPeriod',
+    'candles.weeklyBars',
+  ];
 
   it('lists every indicators and candles key with the task that will read it', () => {
     const keys = [
@@ -291,6 +305,57 @@ describe('indicators and candles: contract until a consumer wires them (PENDING_
     const ok = raw();
     at(ok, 'indicators').rsiWarmupBars = 57;
     expect(parseModelConfig(ok).indicators.rsiWarmupBars).toBe(57);
+  });
+});
+
+describe('levels config (CSN-033): key levels K1-K8', () => {
+  it('holds the master-plan 5.4 defaults', () => {
+    expect(MODEL_CONFIG_V0_3.levels).toEqual({
+      mergeAtr: 0.5,
+      methodPts: 2,
+      reactMax: 4,
+      recentDays: 90,
+      strong: 7,
+      medium: 4,
+      range: 0.25,
+      binAtr: 0.25,
+      binPercentile: 0.8,
+      profileDays: [90, 365],
+      reactionDays: 365,
+      maDays: [50, 200],
+      maWeeks: [200],
+      roundMantissas: [1, 2.5, 5],
+      roundTargetSteps: 10,
+      roundBand: 0.3,
+      roundBtcSteps: [5000, 10000],
+      topStrikes: 5,
+    });
+  });
+
+  it('rejects invalid new levels values', () => {
+    rejects((c) => (at(c, 'levels').binAtr = 0), /binAtr|too small|>0/i);
+    rejects((c) => (at(c, 'levels').binAtr = -1), /binAtr|too small|>0/i);
+    rejects((c) => (at(c, 'levels').binPercentile = 1.5), /binPercentile|too big|<=1/i);
+    rejects((c) => (at(c, 'levels').profileDays = []), /profileDays|too small/i);
+    rejects((c) => (at(c, 'levels').profileDays = [90, 90]), /profileDays must not repeat/);
+    rejects((c) => (at(c, 'levels').profileDays = [1.5]), /profileDays|integer/i);
+    rejects((c) => (at(c, 'levels').reactionDays = 0), /reactionDays|too small|>0/i);
+    rejects((c) => (at(c, 'levels').maDays = [50, 50]), /maDays must not repeat/);
+    rejects((c) => (at(c, 'levels').maWeeks = []), /maWeeks|too small/i);
+    rejects((c) => (at(c, 'levels').maWeeks = [200, 200]), /maWeeks must not repeat/);
+    rejects((c) => (at(c, 'levels').roundMantissas = [10]), /roundMantissas|too big|<10/i);
+    rejects((c) => (at(c, 'levels').roundMantissas = [0.5]), /roundMantissas|too small|>=1/i);
+    rejects((c) => (at(c, 'levels').roundMantissas = []), /roundMantissas|too small/i);
+    rejects((c) => (at(c, 'levels').roundTargetSteps = 0), /roundTargetSteps|too small|>0/i);
+    rejects((c) => (at(c, 'levels').roundBand = 1), /roundBand|too big|<1/i);
+    rejects((c) => (at(c, 'levels').roundBtcSteps = [0]), /roundBtcSteps|too small|>0/i);
+    rejects((c) => (at(c, 'levels').topStrikes = 2.5), /topStrikes|integer/i);
+    rejects((c) => (at(c, 'levels').topStrikes = 0), /topStrikes|too small|>0/i);
+  });
+
+  it('rejects an unknown levels key and a missing new key', () => {
+    rejects((c) => (at(c, 'levels').bogus = 1), /bogus|unrecognized/i);
+    rejects((c) => delete at(c, 'levels').topStrikes, /topStrikes|received undefined|required/i);
   });
 });
 

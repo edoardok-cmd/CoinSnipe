@@ -17,3 +17,5 @@ export * as lab from './lab/reference';
 export * from './levelA/marketWeather';
 export * from './levelA/altSeason';
 export type { Measure as LevelAMeasure, MeasureResult, MissingReason } from './levelA/subScore';
+export * from './levels/methods';
+export * from './levels/keyLevels';
