@@ -14,7 +14,7 @@
  * apply migrations to it, then run:
  *   DATABASE_URL=<scratch url> CSN024_SCRATCH_DB_NAME=<its name> pnpm --filter @coinsnipe/worker test
  */
-import { PrismaClient } from '@coinsnipe/db';
+import { listUpcomingCalendar, PrismaClient } from '@coinsnipe/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ETF_DECISIONS_ENV, loadEtfDecisions } from '../config/etfDecisions';
 import { type FetchMacroReport, runFetchMacroJob } from '../jobs/fetchMacro';
@@ -189,6 +189,14 @@ describeScratch('fetchMacro end to end against the scratch database (CSN-024)', 
       { date: '2026-11-13', kind: 'cpi', title: 'US CPI inflation release', assetId: null },
       { date: '2026-11-20', kind: 'etf', title: 'SAMPLE second ETF decision date', assetId: null },
     ]);
+
+    // CSN-024-FOLLOWUP-8: the shared read query returns the same rows, serialised for the API.
+    const upcoming = await listUpcomingCalendar(prisma, { from: TODAY });
+    expect(upcoming.to).toBe('2026-11-23');
+    expect(
+      upcoming.events.map(({ date, kind, title, assetId }) => ({ date, kind, title, assetId })),
+    ).toEqual(calendar);
+    expect(upcoming.events.every((e) => /^\d+$/.test(e.id))).toBe(true);
   });
 
   it('the daily job writes every source and reports the stale A8 composite as a warning', async () => {
