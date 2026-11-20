@@ -49,7 +49,15 @@ If the Protection Bypass for Automation secret leaks:
 1. Before changing anything, save the current (old) secret into an environment variable so it can be tested after rotation. Use a hidden prompt, not a literal in a command: `read -rs OLD_BYPASS && export OLD_BYPASS`, then paste the value.
 2. In the same Deployment Protection section, revoke it or regenerate it (labels may differ). Revoke first if you are not sure which action is available.
 3. Save the new value the same way: `read -rs VERCEL_AUTOMATION_BYPASS_SECRET && export VERCEL_AUTOMATION_BYPASS_SECRET`. Update the copy in your local secret store and in any environment that held the old one (for example, the sync script's environment once it exists).
-4. Verify the new secret is accepted. An empty variable is never a pass. Guard first, then this must print `200`:
+4. Verify the new secret is accepted. This check only means something if the hub is protected. An unprotected hub returns 200 to every request, including any value, so first confirm that an anonymous request with **no** bypass header is protected. Protected means: status `401`, or a `3xx` whose redirect host is exactly `vercel.com`, and the status is not `000`.
+
+   ```
+   curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' https://coinsnipe-hub-repo.vercel.app/
+   ```
+
+   If that anonymous result is not protected, **stop**. Do not run the new-secret check, and re-check the Vercel setting first.
+
+   Only after the anonymous request is protected, an empty variable is never a pass. Guard first, then this must print `200`:
 
    ```
    test -n "$VERCEL_AUTOMATION_BYPASS_SECRET" || { echo "VERCEL_AUTOMATION_BYPASS_SECRET is empty: not a pass"; exit 1; }
@@ -66,7 +74,7 @@ If the Protection Bypass for Automation secret leaks:
    The old secret counts as **revoked** only when all of these hold:
 
    - the status is `401`, or it is a `3xx`;
-   - for a `3xx`, the redirect host is exactly `vercel.com`. You must see `vercel.com` in the output, for example `302 https://vercel.com/sso-api?...`;
+   - for a `3xx`, the redirect host is exactly `vercel.com`: the hostname equals `vercel.com`, not merely contains it. Lookalikes such as `vercel.com.example.invalid` or `evil-vercel.com` are **not** a pass. A passing output looks like `302 https://vercel.com/sso-api?...`;
    - the status is not `000`. `000` means no response was received, which is not a pass.
 
    Anything else counts as **not** revoked: `200`, a `3xx` to another host, `000`, or empty output. Do not continue; re-check the rotation in the dashboard first.
@@ -81,7 +89,7 @@ Anonymous checks, with no cookies and no credentials. Run each URL twice: once w
 A response counts as **protected** when it is either:
 
 - status **401**, or
-- a **3xx** whose redirect target host is **`vercel.com`**.
+- a **3xx** whose redirect host is exactly **`vercel.com`** (the hostname equals `vercel.com`; a lookalike that merely contains it does not count).
 
 Anything else (200, any other 3xx, 5xx, or a timeout) **fails** the check. For a 401 the redirect field is empty, which is expected.
 
@@ -151,4 +159,4 @@ The hub mirror is refreshed by `.claude/specs/CoinSnipe/hub/sync-hub.py`. That s
 
 ## Sensitive content
 
-This file is in the public CoinSnipe repo. It holds no secret values, no internal costs, no pricing, and no personal account handles. Keep it that way when updating it.
+This file is in the public CoinSnipe repo. It holds no secret values, no internal costs, and no pricing. It names the GitHub owner `TJmosh` as recorded on the board. That owner name is not a secret. Keep the file free of secret values, costs, and pricing when updating it.
