@@ -178,6 +178,32 @@ const subScoreSchema = z
     }
   });
 
+/**
+ * Level B parameters the master plan states but the Lab hard-codes or leaves implicit (CSN-034).
+ * `sector` above stays identical to the Lab's keys; the engine's additions live here.
+ */
+const levelBSchema = z.strictObject({
+  /** A group with fewer member coins than this is flagged low confidence. */
+  minMembers: positiveInt,
+  /** Days between a group's Heat today and the Heat it is compared with for the phase. */
+  slopeDays: positiveInt,
+  /** Days of the short and long return windows behind B1, and their weights (add to 100). */
+  returnDays: z.strictObject({ short: positiveInt, long: positiveInt }),
+  returnWeights: z
+    .strictObject({ short: weight, long: weight })
+    .refine((w) => sumsTo100([w.short, w.long]), {
+      message: 'B1 return weights (short, long) must add up to 100',
+    }),
+  /** B2 moving-average length (days). */
+  breadthMaDays: positiveInt,
+  /** B3 volume windows (days): the short average against the long one. */
+  volumeDays: z.strictObject({ short: positiveInt, long: positiveInt }),
+  /** Leading projects per group: how many, and the Quality they need (inclusive). */
+  leaders: z.strictObject({ count: positiveInt, minQuality: score100 }),
+  /** S2: points added to a Heating-up sector's Heat and taken from a Cooling-down one's. */
+  seasonAdjust: nonNegative,
+});
+
 const levelASchema = z.strictObject({
   subScore: subScoreSchema,
   market: z.strictObject({
@@ -334,6 +360,7 @@ export const modelConfigSchema = z
      * lives here. See DISCREPANCIES.md D-08 to D-13.
      */
     levelA: levelASchema,
+    levelB: levelBSchema,
     sector: z
       .strictObject({
         ...weightShape(SECTOR_IDS),
