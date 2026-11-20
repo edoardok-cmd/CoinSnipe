@@ -46,10 +46,23 @@ Turning Vercel Authentication off (setting it back to no protection in the same 
 
 If the Protection Bypass for Automation secret leaks:
 
-1. In the same Deployment Protection section, revoke it or regenerate it (labels may differ). Revoke first if you are not sure which action is available.
-2. Update the copy in your local secret store and in any environment that held it (for example, the sync script's environment once it exists).
-3. Check that the old value no longer gets through. Read it from an environment variable (`-H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET"`), never a literal value in the command.
-4. Never write the value into this repo, chat, or shell history.
+1. Before changing anything, save the current (old) secret into an environment variable so it can be tested after rotation. Use a hidden prompt, not a literal in a command: `read -rs OLD_BYPASS && export OLD_BYPASS`, then paste the value.
+2. In the same Deployment Protection section, revoke it or regenerate it (labels may differ). Revoke first if you are not sure which action is available.
+3. Save the new value the same way: `read -rs VERCEL_AUTOMATION_BYPASS_SECRET && export VERCEL_AUTOMATION_BYPASS_SECRET`. Update the copy in your local secret store and in any environment that held the old one (for example, the sync script's environment once it exists).
+4. Verify the new secret is accepted. This must print `200`:
+
+   ```
+   curl -sS -o /dev/null -w '%{http_code}\n' -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" https://coinsnipe-hub-repo.vercel.app/
+   ```
+
+5. Verify the old secret is rejected. This must **not** print `200`:
+
+   ```
+   curl -sS -o /dev/null -w '%{http_code}\n' -H "x-vercel-protection-bypass: $OLD_BYPASS" https://coinsnipe-hub-repo.vercel.app/
+   ```
+
+6. Run `unset OLD_BYPASS` once the check is done.
+7. Use environment-variable indirection only, as above. Never write a literal secret into a command, this repo, chat, or shell history.
 
 ## Verification
 
@@ -119,8 +132,9 @@ The hub mirror is refreshed by `.claude/specs/CoinSnipe/hub/sync-hub.py`. That s
 - **Do not run `sync-hub.py` until a bypass is wired in and the script is fixed.** The fail-closed fix (abort before `rmtree` when the final URL is not the hub, or when a fetch is not 200 HTML) and sending the bypass header are tracked as **AX-CSN-004-FOLLOWUP-1** on the harness board. That fix is not done.
 - Bypass config, not yet set anywhere:
   - Secret source: Vercel project, Settings, Deployment Protection, Protection Bypass for Automation.
-  - Env var name the sync script would read: `VERCEL_AUTOMATION_BYPASS_SECRET`. This is Vercel's documented automation name. It replaces the earlier proposed name `VERCEL_PROTECTION_BYPASS_SECRET`. The value is never written to the repo.
-  - Header sent on requests: `x-vercel-protection-bypass` (confirmed).
+  - Env var name the sync script would read: `VERCEL_AUTOMATION_BYPASS_SECRET`. It replaces the earlier proposed name `VERCEL_PROTECTION_BYPASS_SECRET`. The value is never written to the repo.
+  - Header sent on requests: `x-vercel-protection-bypass`.
+  - Provenance: the name and header are as read in Vercel's public automation-bypass docs (https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/protection-bypass-automation) during review on 2026-11-20. The user should confirm both in the dashboard before relying on them.
   - Status: **not configured**.
 
 `.env.example` is not changed, by decision. The CoinSnipe app does not read the hub, and the sync script lives in the harness, so listing the variable in this repo would mislead readers.
