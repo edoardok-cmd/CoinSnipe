@@ -176,7 +176,7 @@ export function k4RoundStep(price: number, config: ModelConfig = MODEL_CONFIG_V0
 }
 
 /**
- * K4: round numbers within +-`levels.range` of the price. Bitcoin uses every step in
+ * K4: round numbers within +-`levels.roundBand` (30%) of the price. Bitcoin uses every step in
  * `levels.roundBtcSteps` (5K and 10K); other coins use the single step from k4RoundStep.
  */
 export function k4RoundNumbers(
@@ -186,8 +186,8 @@ export function k4RoundNumbers(
 ): Candidate[] {
   if (!finitePositive(price)) return [];
   const steps = isBitcoin ? config.levels.roundBtcSteps : [k4RoundStep(price, config)];
-  const lo = price * (1 - config.levels.range);
-  const hi = price * (1 + config.levels.range);
+  const lo = price * (1 - config.levels.roundBand);
+  const hi = price * (1 + config.levels.roundBand);
   const seen = new Set<number>();
   const out: Candidate[] = [];
   for (const step of steps) {

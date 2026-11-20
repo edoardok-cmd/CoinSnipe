@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MODEL_CONFIG_V0_3 } from '../src/config/schema';
+import type { Candle } from '../src/types';
 import {
   NO_EARLIER_PRICE_ABOVE,
   computeKeyLevels,
@@ -101,7 +102,8 @@ describe('K4 round numbers', () => {
 
   it('Bitcoin: every 5K (so every 10K too) within the range', () => {
     const prices = k4RoundNumbers(100_000, true, cfg).map((c) => c.price);
-    expect(prices[0]).toBe(75_000);
+    expect(prices[0]).toBe(70_000); // -30%, per roundBand
+    expect(prices[prices.length - 1]).toBe(130_000); // +30%
     expect(prices).toContain(100_000);
     expect(prices).toContain(105_000);
     expect(prices.every((p) => p % 5000 === 0)).toBe(true);
@@ -110,8 +112,8 @@ describe('K4 round numbers', () => {
 
   it('other coins: multiples of the chosen step within the range', () => {
     const prices = k4RoundNumbers(100, false, cfg).map((c) => c.price);
-    expect(prices[0]).toBe(75);
-    expect(prices[prices.length - 1]).toBe(125);
+    expect(prices[0]).toBe(70);
+    expect(prices[prices.length - 1]).toBe(130);
     expect(prices.every((p) => p % 5 === 0)).toBe(true);
     expect(k4RoundNumbers(0, false, cfg)).toEqual([]);
   });
@@ -214,6 +216,33 @@ describe('strength points', () => {
     expect(six.points).toBe(2 * six.methods.length + 4 + 1);
   });
 
+  it('a candle opening inside the zone and closing through it is not a reaction', () => {
+    const zoneOf = (candle: Partial<Candle>, strikePx: number) =>
+      zoneAt(
+        computeKeyLevels(
+          btc({ optionsStrikes: [strike(strikePx)] }, SAMPLE_withCandle(btcFlat(), 320, candle)),
+          cfg,
+        ),
+        strikePx,
+      )!;
+    // Breakdown through a support zone at 95000: opens inside it (zone 95000 to 95000), closes below.
+    expect(
+      zoneOf({ open: 95_000, high: 95_500, low: 94_000, close: 94_200 }, 95_000).reactions,
+    ).toBe(0);
+    // Breakout through a resistance zone at 103000: opens at it, closes above.
+    expect(
+      zoneOf({ open: 103_000, high: 103_600, low: 102_900, close: 103_500 }, 103_000).reactions,
+    ).toBe(0);
+    // Control: opens below, wicks in, closes below on the same side: counts.
+    expect(
+      zoneOf({ open: 102_000, high: 103_100, low: 101_900, close: 102_200 }, 103_000).reactions,
+    ).toBe(1);
+    // Control: opens above a support zone, wicks in, closes above: counts.
+    expect(
+      zoneOf({ open: 96_000, high: 96_200, low: 94_900, close: 95_800 }, 95_000).reactions,
+    ).toBe(1);
+  });
+
   it('a close beyond the zone is not a reaction', () => {
     const s = SAMPLE_withCandle(btcFlat(), 320, { high: 103_600, close: 103_500 });
     const z = zoneAt(
@@ -275,6 +304,14 @@ describe('K8 exclusion', () => {
     for (const z of eth.zones) expect(z.methods).not.toContain('K7');
     const b = computeKeyLevels(btc({ sthRealisedPrice: 99_900 }), cfg);
     expect(zoneAt(b, 99_900)!.methods).toContain('K7');
+  });
+});
+
+describe('K4 span in zones', () => {
+  it('round numbers reach -30% and +30% even though other candidates stop at +-25%', () => {
+    const r = computeKeyLevels(btc({ price: 100_000 }), cfg);
+    expect(zoneAt(r, 70_000)!.methods).toEqual(['K4']);
+    expect(zoneAt(r, 130_000)!.methods).toEqual(['K4']);
   });
 });
 
