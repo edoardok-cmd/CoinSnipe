@@ -1,15 +1,20 @@
 # CoinSnipe Hub access (CSN-004)
 
-Status: **decision recorded; access change PENDING user activation.** Nothing in this document has been applied by the harness. Post-change verification has not run yet.
+Status:
+
+- The anonymous baseline already returns 302 to the Vercel SSO gate (`vercel.com/sso-api`) at capture time (2026-11-20, about 17:11 UTC). The 17:01 UTC capture matched.
+- The user's activation of the Vercel setting is **unconfirmed**. Nothing in this document has been applied by the harness, and this document does not claim the change is done.
+- Post-change verification has not run yet.
 
 ## Decision
 
 | Item | Value |
 |---|---|
 | Decision | Hub privacy: make the internal CoinSnipe Hub private |
-| Option chosen | "Private" (Vercel Deployment Protection, default option: Vercel Authentication on all deployments) |
+| Option chosen | Vercel URL protection: Vercel Authentication on all deployments, including Production (default option on the board). The user's word was "private". |
+| GitHub source | `TJmosh/coinsnipe-hub-repo` is **NOT assessed** (`gh` cannot resolve it). See "GitHub repo visibility". |
 | Decision log | D25 in the private CoinSnipe decisions log (Agent X workspace). Approved 2026-10-23 with protection as the recommended default. |
-| User confirmation | 2026-10-28, "private" |
+| User confirmation | 2026-10-28, cited from the CoinSnipe board task CSN-004 description, line "USER DECISION 2026-10-28: private" |
 | Recorded | 2026-11-20 |
 | Task | CSN-004 |
 
@@ -25,73 +30,101 @@ We have no Vercel credentials, so the user makes this change. Labels can differ 
 2. Open the project for the hub (`coinsnipe-hub-repo`).
 3. Go to **Settings**, then **Deployment Protection**.
 4. Under **Vercel Authentication**, pick the option that covers **all deployments, including Production**. Do not pick a preview-only or standard option, because that leaves the production URL public. Save.
-5. If the production option is greyed out or missing, stop. That usually means the plan needs an upgrade. Tell the orchestrator so the alternatives (password protection on Pro, or private GitHub repo plus deleting the public deployment) can be decided.
-6. Wait a minute, then run the verification commands below. If the old 200 still appears, redeploy the production deployment and check again.
+5. If the All Deployments option is missing or unavailable, do not guess a workaround. Contact Vercel support and record the answer here. Stop and tell the orchestrator so the alternatives (password protection on Pro, or private GitHub repo plus deleting the public deployment) can be decided.
+6. Wait a minute, then run the verification commands below. If a check still returns 200, redeploy the production deployment and check again. If it still returns 200, contact Vercel support.
 
 Optional, needed before the sync script can run again (see "Sync script impact"):
 
 7. Still under **Deployment Protection**, find **Protection Bypass for Automation** and create a bypass secret for the hub project.
 8. Store that secret in your local secret manager. Do not paste it into chat, into a repo file, or into a shell command.
 
+### Rollback
+
+Turning Vercel Authentication off (setting it back to no protection in the same Deployment Protection section) **re-exposes the hub publicly** at `https://coinsnipe-hub-repo.vercel.app`, including the internal costs and pricing. Do this only as an explicit decision. Afterwards, re-run the verification commands below to confirm the state you intended.
+
+### Bypass secret rotation
+
+If the Protection Bypass for Automation secret leaks:
+
+1. In the same Deployment Protection section, revoke it or regenerate it (labels may differ). Revoke first if you are not sure which action is available.
+2. Update the copy in your local secret store and in any environment that held it (for example, the sync script's environment once it exists).
+3. Check that the old value no longer gets through. Read it from an environment variable (`-H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET"`), never a literal value in the command.
+4. Never write the value into this repo, chat, or shell history.
+
 ## Verification
 
-Anonymous checks, run with no cookies and no credentials. Use `-I` (HEAD) or the GET form as shown. A protected hub returns 401, or a 302 to a Vercel login or SSO page.
+Anonymous checks, with no cookies and no credentials. Run each URL twice: once with HEAD (`-I`) and once with GET.
+
+A response counts as **protected** when it is either:
+
+- status **401**, or
+- a **3xx** whose redirect target host is **`vercel.com`**.
+
+Anything else (200, any other 3xx, 5xx, or a timeout) **fails** the check. For a 401 the redirect field is empty, which is expected.
+
+HEAD commands:
 
 ```
 curl -sS -I -o /dev/null -w '%{http_code} %{redirect_url}\n' https://coinsnipe-hub-repo.vercel.app/
 curl -sS -I -o /dev/null -w '%{http_code} %{redirect_url}\n' https://coinsnipe-hub-repo.vercel.app/score-lab/coinsnipe-data-and-pricing.html
 ```
 
-Acceptance: neither URL returns 200 to an anonymous request.
+GET commands:
 
-### Baseline (captured 2026-11-20, about 17:01 UTC, before any user change)
+```
+curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' https://coinsnipe-hub-repo.vercel.app/
+curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' https://coinsnipe-hub-repo.vercel.app/score-lab/coinsnipe-data-and-pricing.html
+```
 
-| URL | Anonymous status | Redirect target (host and path) |
-|---|---|---|
-| `/` | 302 | `vercel.com/sso-api` |
-| `/score-lab/coinsnipe-data-and-pricing.html` | 302 | `vercel.com/sso-api` |
+Acceptance: all four checks (two URLs, HEAD and GET) are protected by the definition above. A passing redirect looks like `302 https://vercel.com/...`. Record only the status and the host in this file, never the full redirect URL, which carries a one-time nonce.
+
+### Baseline (anonymous, before any user activation recorded in this task)
+
+| URL | HEAD | GET | Redirect host and path |
+|---|---|---|---|
+| `/` | 302 | 302 | `vercel.com/sso-api` |
+| `/score-lab/coinsnipe-data-and-pricing.html` | 302 | 302 | `vercel.com/sso-api` |
 
 Notes on the baseline:
 
-- Neither URL returns 200 right now. The 302 goes to Vercel's SSO gate, and following it ends at `vercel.com/login` with HTTP 200. The `_vercel_sso_nonce` cookie also points to Vercel Authentication. So protection appears to be active already.
-- The record does not show who enabled it or when. I could not tell from the HTTP checks whether the user made the change after 2026-10-28. Treat the baseline as "not 200 now" and nothing more.
-- Post-change verification is **PENDING user activation**. The result must be re-captured and pasted here after the user saves the setting.
+- By the definition above, the baseline already matches a protected response. The 302 goes to Vercel's SSO gate. Following it ends at `vercel.com/login` with HTTP 200 (checked 2026-11-20, 17:01 UTC). The `_vercel_sso_nonce` cookie also points to Vercel Authentication.
+- This does not show that the user activated the setting. The capture cannot tell who enabled the gate or when. Treat the user's activation as **unconfirmed** until the user says it is done and the checks above are re-run and recorded.
 
-### Post-change (PENDING)
+### Post-change (PENDING user activation)
 
-| URL | Status | Date |
-|---|---|---|
-| `/` | PENDING | PENDING |
-| `/score-lab/coinsnipe-data-and-pricing.html` | PENDING | PENDING |
+| URL | HEAD | GET | Date |
+|---|---|---|---|
+| `/` | PENDING | PENDING | PENDING |
+| `/score-lab/coinsnipe-data-and-pricing.html` | PENDING | PENDING | PENDING |
 
 ## GitHub repo visibility
 
 Command: `gh repo view TJmosh/coinsnipe-hub-repo --json visibility`
 
-Result (2026-11-20): not determined.
+Result (2026-11-20): **not determined.**
 
-- `gh` is signed in as `edoardok-cmd`. The command returned `Could not resolve to a Repository` (exit 1). `gh api repos/TJmosh/coinsnipe-hub-repo` returned 404.
+- The `gh` CLI is signed in to a personal account that cannot resolve this repo. The command returned `Could not resolve to a Repository` (exit 1). `gh api repos/TJmosh/coinsnipe-hub-repo` returned 404.
 - Anonymous `https://github.com/TJmosh/coinsnipe-hub-repo` and `https://api.github.com/repos/TJmosh/coinsnipe-hub-repo` both returned 404.
 - That fits a private repo that this account cannot see. It also fits a wrong owner or repo name. It does not prove either one.
-- The user should confirm the owner and name, then check the repo's visibility in GitHub settings. Changing visibility is a separate decision and is not part of this task.
+- The GitHub source `TJmosh/coinsnipe-hub-repo` is **not assessed** by this task. The user should confirm the owner and name, then check the repo's visibility in GitHub settings. Changing visibility is a separate decision.
 
 A Vercel-only change does not hide the hub source. If the GitHub repo is public, the content is still readable there.
 
 ## Sync script impact (D25 side effect)
 
-The hub mirror is refreshed by `.claude/specs/CoinSnipe/hub/sync-hub.py`. That script lives in the Agent X harness, not in this repo, and it was not edited for CSN-004.
+The hub mirror is refreshed by `.claude/specs/CoinSnipe/hub/sync-hub.py`. That script lives in the Agent X harness, not in this repo, and it was not edited for CSN-004. It was not run during this task.
 
 - Once protection is on, the script gets no hub content. Its `urllib` fetch follows the redirect and receives the Vercel login page with HTTP 200 (checked read-only on 2026-11-20).
 - The script also runs `shutil.rmtree` on `hub/site/` and `hub/text/` before fetching. A run now would delete the mirror and write login-page HTML in its place.
-- **Do not run `sync-hub.py` until a bypass is wired in and the script is fixed.** The fix needs a follow-up task: fail closed (abort before `rmtree` when the final URL is not the hub, or when a fetch is not 200 HTML) and send the bypass header.
+- **Do not run `sync-hub.py` until a bypass is wired in and the script is fixed.** The fail-closed fix (abort before `rmtree` when the final URL is not the hub, or when a fetch is not 200 HTML) and sending the bypass header are tracked as **AX-CSN-004-FOLLOWUP-1** on the harness board. That fix is not done.
 - Bypass config, not yet set anywhere:
   - Secret source: Vercel project, Settings, Deployment Protection, Protection Bypass for Automation.
-  - Env var name the sync script would read: `VERCEL_PROTECTION_BYPASS_SECRET` (proposed name; the value is never written to the repo).
-  - Header Vercel checks on requests: `x-vercel-protection-bypass`. Confirm against Vercel's current docs when implementing.
+  - Env var name the sync script would read: `VERCEL_AUTOMATION_BYPASS_SECRET`. This is Vercel's documented automation name. It replaces the earlier proposed name `VERCEL_PROTECTION_BYPASS_SECRET`. The value is never written to the repo.
+  - Header sent on requests: `x-vercel-protection-bypass` (confirmed).
   - Status: **not configured**.
 
-`.env.example` is not changed. The CoinSnipe app does not read the hub, and the sync script lives in the harness, so listing the variable in this repo would mislead readers.
+`.env.example` is not changed, by decision. The CoinSnipe app does not read the hub, and the sync script lives in the harness, so listing the variable in this repo would mislead readers.
 
 ## Sensitive content
 
-This file is in the public CoinSnipe repo. It holds no secret values, no internal costs, and no pricing. Keep it that way when updating it.
+This file is in the public CoinSnipe repo. It holds no secret values, no internal costs, no pricing, and no personal account handles. Keep it that way when updating it.
