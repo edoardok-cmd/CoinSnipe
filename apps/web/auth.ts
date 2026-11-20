@@ -1,26 +1,21 @@
 import NextAuth from 'next-auth';
+import type { AdapterAccount } from 'next-auth/adapters';
 import Apple from 'next-auth/providers/apple';
 import Google from 'next-auth/providers/google';
 import Resend from 'next-auth/providers/resend';
+import { cookies } from 'next/headers';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import { Resend as ResendClient } from 'resend';
 import { prisma } from '@coinsnipe/db';
 import { withTokenMinimisation } from './lib/auth/adapter';
-import { emitAuthEvent } from './lib/auth/analytics';
-import {
-  buildSessionCookie,
-  SESSION_MAX_AGE_SECONDS,
-  SESSION_UPDATE_AGE_SECONDS,
-} from './lib/auth/cookies';
-import { decideOAuthSignIn } from './lib/auth/linking';
+import { buildAuthConfig } from './lib/auth/config';
+import { LINK_INTENT_COOKIE, verifyLinkIntentValue } from './lib/auth/linkIntent';
 import { sendMagicLink } from './lib/auth/magicLinkSender';
-import { enabledProviders, isOAuthProvider } from './lib/auth/providers';
+import { enabledProviders } from './lib/auth/providers';
 import { defaultRateLimitStore } from './lib/auth/rateLimit';
 import { MAGIC_LINK_MAX_AGE_SECONDS } from './lib/email/magicLink';
 
-/** Where each kind of login lands (CSN-050). Auth.js sends brand-new users to pages.newUser. */
-export const FIRST_LOGIN_PATH = '/app/onboarding';
-export const HOME_PATH = '/app';
+export { FIRST_LOGIN_PATH, HOME_PATH } from './lib/auth/config';
 
 const isProduction = process.env.NODE_ENV === 'production';
 const enabled = enabledProviders(process.env);
@@ -67,47 +62,37 @@ const providers = [
     : []),
 ];
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: withTokenMinimisation(PrismaAdapter(prisma)),
-  providers,
-  session: {
-    strategy: 'database',
-    maxAge: SESSION_MAX_AGE_SECONDS,
-    updateAge: SESSION_UPDATE_AGE_SECONDS,
-  },
-  cookies: { sessionToken: buildSessionCookie(isProduction) },
-  useSecureCookies: isProduction,
-  pages: { signIn: '/sign-in', error: '/sign-in', newUser: FIRST_LOGIN_PATH },
-  // Never set allowDangerousEmailAccountLinking: linking is explicit (lib/auth/linking.ts).
-  callbacks: {
-    async signIn({ account, profile }) {
-      if (!account || !isOAuthProvider(account.provider)) return true;
-      // A session at this point means the user started this from Profile (explicit link).
-      const current = await auth();
-      const decision = decideOAuthSignIn({
-        provider: account.provider,
-        profile: profile as { email?: string; email_verified?: boolean | string } | undefined,
-        sessionUserId: current?.user?.id ?? null,
-      });
-      return decision.allow;
-    },
-    async session({ session, user }) {
-      if (session.user) session.user.id = user.id;
-      return session;
-    },
-    async redirect({ url, baseUrl }) {
-      if (url.startsWith('/') && !url.startsWith('//')) return `${baseUrl}${url}`;
+const adapter = withTokenMinimisation(PrismaAdapter(prisma));
+
+export const { handlers, auth, signIn, signOut } = NextAuth(
+  buildAuthConfig({
+    adapter,
+    providers,
+    isProduction,
+    // A session at the signIn callback means the user started this from Profile.
+    getSessionUserId: async () => (await auth())?.user?.id ?? null,
+    getIntentUserId: async () =>
+      verifyLinkIntentValue(
+        process.env.AUTH_SECRET ?? '',
+        (await cookies()).get(LINK_INTENT_COOKIE)?.value,
+        Date.now(),
+      ),
+    consumeIntent: async () => {
+      // Best effort: the callback runs inside the Auth.js route handler, where cookies are writable.
       try {
-        if (new URL(url).origin === baseUrl) return url;
+        (await cookies()).set(LINK_INTENT_COOKIE, '', {
+          path: '/api/auth/callback/apple',
+          httpOnly: true,
+          secure: true,
+          sameSite: 'none',
+          maxAge: 0,
+        });
       } catch {
-        // fall through
+        // The 10 minute expiry bounds a leftover cookie; ignore.
       }
-      return `${baseUrl}${HOME_PATH}`;
     },
-  },
-  events: {
-    async signIn({ account, isNewUser }) {
-      if (isNewUser && account) emitAuthEvent('signup_completed', account.provider);
+    linkAccount: async (userId, account) => {
+      await adapter.linkAccount?.({ ...account, userId } as AdapterAccount);
     },
-  },
-});
+  }),
+);

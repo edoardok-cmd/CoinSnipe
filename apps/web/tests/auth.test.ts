@@ -1,7 +1,20 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { NextRequest } from 'next/server';
-import type { AdapterAccount } from 'next-auth/adapters';
+import type { Adapter, AdapterAccount } from 'next-auth/adapters';
+import {
+  buildAuthConfig,
+  FIRST_LOGIN_PATH,
+  HOME_PATH,
+  type AuthConfigDeps,
+} from '../lib/auth/config';
+import {
+  createLinkIntentValue,
+  linkIntentSetCookie,
+  verifyLinkIntentValue,
+} from '../lib/auth/linkIntent';
+import { handleOAuthSignIn } from '../lib/auth/oauthSignIn';
+import { beginOAuthSignIn } from '../lib/auth/oauthStart';
 import { describe, expect, it, vi } from 'vitest';
 import { lintSource, type Allowlist, type Rule } from '../../../tools/copy-lint/index';
 import { config as middlewareConfig, middleware } from '../middleware';
@@ -33,6 +46,23 @@ import { MAGIC_LINK_COPY, renderMagicLinkEmail } from '../lib/email/magicLink';
 const root = resolve(__dirname, '..');
 const read = (rel: string) => readFileSync(resolve(root, rel), 'utf8');
 
+const SECRET = 'test-secret-test-secret-test-secret';
+const NOW = 1_700_000_000_000;
+
+function testConfig(over: Partial<AuthConfigDeps> & { intentUserId?: string | null } = {}) {
+  const { intentUserId, ...rest } = over;
+  return buildAuthConfig({
+    adapter: {} as Adapter,
+    providers: [],
+    isProduction: true,
+    getSessionUserId: async () => null,
+    getIntentUserId: async () => intentUserId ?? null,
+    consumeIntent: async () => undefined,
+    linkAccount: async () => undefined,
+    ...rest,
+  });
+}
+
 describe('session cookie configuration (CSN-050)', () => {
   it('is httpOnly, SameSite=Lax and path / in every environment', () => {
     for (const prod of [true, false]) {
@@ -54,11 +84,19 @@ describe('session cookie configuration (CSN-050)', () => {
     });
   });
 
-  it('auth.ts uses database sessions and never enables dangerous email linking', () => {
-    const source = read('auth.ts');
-    expect(source).toMatch(/strategy:\s*'database'/);
-    expect(source).not.toMatch(/allowDangerousEmailAccountLinking\s*:\s*true/);
-    expect(source).toMatch(/buildSessionCookie\(isProduction\)/);
+  it('the Auth.js config uses database sessions, the pinned cookie and no dangerous linking', () => {
+    for (const prod of [true, false]) {
+      const cfg = testConfig({ isProduction: prod });
+      expect(cfg.session?.strategy).toBe('database');
+      expect(cfg.cookies?.sessionToken).toEqual(buildSessionCookie(prod));
+      expect(cfg.useSecureCookies).toBe(prod);
+      expect(cfg.pages).toEqual({
+        signIn: '/sign-in',
+        error: '/sign-in',
+        newUser: '/app/onboarding',
+      });
+      expect(JSON.stringify(cfg)).not.toContain('allowDangerousEmailAccountLinking');
+    }
   });
 });
 
@@ -181,9 +219,13 @@ describe('magic link rate limits (CSN-050)', () => {
     ).toBe(true);
   });
 
-  it('reads the client IP from x-forwarded-for, then x-real-ip', () => {
-    expect(clientIp(new Headers({ 'x-forwarded-for': '1.1.1.1, 2.2.2.2' }))).toBe('1.1.1.1');
-    expect(clientIp(new Headers({ 'x-real-ip': '3.3.3.3' }))).toBe('3.3.3.3');
+  it('reads the client IP from x-real-ip, else the proxy-appended last x-forwarded-for entry', () => {
+    expect(clientIp(new Headers({ 'x-real-ip': '3.3.3.3', 'x-forwarded-for': '9.9.9.9' }))).toBe(
+      '3.3.3.3',
+    );
+    // A client-supplied first entry must not choose the bucket.
+    expect(clientIp(new Headers({ 'x-forwarded-for': '6.6.6.6, 2.2.2.2' }))).toBe('2.2.2.2');
+    expect(clientIp(new Headers({ 'x-forwarded-for': '1.1.1.1' }))).toBe('1.1.1.1');
     expect(clientIp(new Headers())).toBe('unknown');
   });
 
@@ -282,10 +324,6 @@ describe('linkAccount token dropping (CSN-050)', () => {
     expect(Object.keys(passed)).not.toContain('id_token');
     expect(passed['providerAccountId']).toBe('g-123');
   });
-
-  it('auth.ts wraps the Prisma adapter', () => {
-    expect(read('auth.ts')).toMatch(/withTokenMinimisation\(PrismaAdapter\(prisma\)\)/);
-  });
 });
 
 describe('log out everywhere (CSN-050)', () => {
@@ -304,8 +342,11 @@ describe('log out everywhere (CSN-050)', () => {
     expect(res.status).toBe(200);
     expect(deleteAllForUser).toHaveBeenCalledWith('u1');
     expect(await res.json()).toEqual({ ok: true, sessionsRemoved: 3 });
-    const cookies = res.headers.getSetCookie().join('\n');
-    expect(cookies).toContain('authjs.session-token=; Path=/; Max-Age=0');
+    // Full strings: the __Secure- cookie is ignored by browsers unless it carries Secure.
+    expect(res.headers.getSetCookie()).toEqual([
+      'authjs.session-token=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax',
+      '__Secure-authjs.session-token=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax',
+    ]);
   });
 
   it('returns 401 without a valid session and deletes nothing', async () => {
@@ -393,6 +434,8 @@ describe('explicit provider linking (CSN-050)', () => {
         getUserId: async () => 'u1',
         isEnabled: () => true,
         startLink: async (p) => `/api/auth/signin/${p}`,
+        linkIntentCookie: (userId, p) =>
+          p === 'apple' ? linkIntentSetCookie(SECRET, userId, NOW) : null,
         ...deps,
       },
     );
@@ -410,10 +453,119 @@ describe('explicit provider linking (CSN-050)', () => {
     expect((await link({ provider: 'apple' }, { isEnabled: () => false })).status).toBe(404);
   });
 
-  it('auth.ts enforces the rule in the signIn callback and never ships dangerous linking', () => {
-    const source = read('auth.ts');
-    expect(source).toMatch(/decideOAuthSignIn/);
-    expect(source).toMatch(/sessionUserId:\s*current\?\.user\?\.id/);
+  it('Google link: no intent cookie is set, the session cookie carries the user', async () => {
+    const res = await link({ provider: 'google' });
+    expect(res.headers.getSetCookie()).toEqual([]);
+  });
+
+  it('Apple link: sets a path-scoped SameSite=None; Secure; HttpOnly intent cookie for the user', async () => {
+    const res = await link({ provider: 'apple' });
+    const [cookie] = res.headers.getSetCookie();
+    expect(res.headers.getSetCookie()).toHaveLength(1);
+    expect(cookie).toMatch(
+      /^__Secure-csn-link-intent=[^;]+; Path=\/api\/auth\/callback\/apple; HttpOnly; Secure; SameSite=None; Max-Age=600$/,
+    );
+    const value = cookie!.split(';')[0]!.split('=').slice(1).join('=');
+    expect(verifyLinkIntentValue(SECRET, value, NOW + 1000)).toBe('u1');
+  });
+
+  describe('link intent cookie', () => {
+    const value = createLinkIntentValue(SECRET, 'u1', NOW);
+    it('verifies, expires after 10 minutes, and rejects tampering or another secret', () => {
+      expect(verifyLinkIntentValue(SECRET, value, NOW + 599_000)).toBe('u1');
+      expect(verifyLinkIntentValue(SECRET, value, NOW + 600_001)).toBeNull();
+      expect(verifyLinkIntentValue('other-secret', value, NOW)).toBeNull();
+      const [body, sig] = value.split('.');
+      const forged = Buffer.from(JSON.stringify({ u: 'victim', e: NOW + 1e9, n: 'x' })).toString(
+        'base64url',
+      );
+      expect(verifyLinkIntentValue(SECRET, `${forged}.${sig}`, NOW)).toBeNull();
+      expect(verifyLinkIntentValue(SECRET, `${body}.`, NOW)).toBeNull();
+      expect(verifyLinkIntentValue(SECRET, 'garbage', NOW)).toBeNull();
+      expect(verifyLinkIntentValue(SECRET, undefined, NOW)).toBeNull();
+      expect(verifyLinkIntentValue('', value, NOW)).toBeNull();
+    });
+  });
+
+  describe('signIn callback (handleOAuthSignIn)', () => {
+    const verified = { email: 'a@example.com', email_verified: true };
+    const run = (over: Partial<Parameters<typeof handleOAuthSignIn>[0]> = {}) => {
+      const linkAccount = vi.fn(async () => undefined);
+      const consumeIntent = vi.fn();
+      const promise = handleOAuthSignIn({
+        account: { provider: 'apple' },
+        profile: verified,
+        sessionUserId: null,
+        intentUserId: null,
+        linkAccount,
+        consumeIntent,
+        ...over,
+      });
+      return { promise, linkAccount, consumeIntent };
+    };
+
+    it('links Apple to the intent user (no session cookie on the cross-site POST) and redirects', async () => {
+      const r = run({ intentUserId: 'u1' });
+      expect(await r.promise).toBe('/app/profile?linked=apple');
+      expect(r.linkAccount).toHaveBeenCalledWith('u1');
+      expect(r.consumeIntent).toHaveBeenCalledOnce();
+    });
+
+    it('refuses an unverified provider email even with an intent, and links nothing', async () => {
+      const r = run({
+        intentUserId: 'u1',
+        profile: { email: 'a@example.com', email_verified: 'false' },
+      });
+      expect(await r.promise).toBe('/app/profile?link_error=unverified-email');
+      expect(r.linkAccount).not.toHaveBeenCalled();
+      expect(r.consumeIntent).toHaveBeenCalledOnce();
+    });
+
+    it('reports already-linked when the adapter rejects the duplicate', async () => {
+      const r = run({
+        intentUserId: 'u1',
+        linkAccount: vi.fn(async () => {
+          throw new Error('unique');
+        }),
+      });
+      expect(await r.promise).toBe('/app/profile?link_error=already-linked');
+    });
+
+    it('with a session (Google) it only enforces the rule and lets Auth.js link', async () => {
+      const r = run({ account: { provider: 'google' }, sessionUserId: 'u1' });
+      expect(await r.promise).toBe(true);
+      expect(r.linkAccount).not.toHaveBeenCalled();
+      const bad = run({
+        account: { provider: 'google' },
+        sessionUserId: 'u1',
+        profile: { email: 'a@example.com' },
+      });
+      expect(await bad.promise).toBe('/app/profile?link_error=unverified-email');
+    });
+
+    it('a plain sign-in needs a verified email, never links by itself, and ignores email providers', async () => {
+      expect(await run().promise).toBe(true);
+      expect(
+        await run({ profile: { email: 'a@example.com', email_verified: false } }).promise,
+      ).toBe('/sign-in?error=AccessDenied');
+      const r = run({ account: { provider: 'resend' }, profile: undefined });
+      expect(await r.promise).toBe(true);
+    });
+
+    it('the real config callback wires session, intent and link dependencies', async () => {
+      const linkAccount = vi.fn(async () => undefined);
+      const cfg = testConfig({ intentUserId: 'u7', linkAccount });
+      const out = await cfg.callbacks!.signIn!({
+        account: { provider: 'apple', providerAccountId: 'ap-1', type: 'oidc' },
+        profile: verified,
+        user: { id: 'x' } as never,
+      } as never);
+      expect(out).toBe('/app/profile?linked=apple');
+      expect(linkAccount).toHaveBeenCalledWith(
+        'u7',
+        expect.objectContaining({ providerAccountId: 'ap-1' }),
+      );
+    });
   });
 });
 
@@ -462,10 +614,50 @@ describe('providers, analytics, redirects (CSN-050)', () => {
   });
 
   it('first login goes to onboarding and later logins to Home', () => {
-    const source = read('auth.ts');
-    expect(source).toMatch(/FIRST_LOGIN_PATH = '\/app\/onboarding'/);
-    expect(source).toMatch(/HOME_PATH = '\/app'/);
-    expect(source).toMatch(/newUser: FIRST_LOGIN_PATH/);
+    expect(FIRST_LOGIN_PATH).toBe('/app/onboarding');
+    expect(HOME_PATH).toBe('/app');
+    expect(testConfig().pages?.newUser).toBe(FIRST_LOGIN_PATH);
+  });
+
+  it('the redirect callback keeps logins on our own origin and defaults to Home', async () => {
+    const redirect = testConfig().callbacks!.redirect!;
+    const base = 'https://coinsnipe.test';
+    expect(await redirect({ url: '/app/profile', baseUrl: base })).toBe(`${base}/app/profile`);
+    expect(await redirect({ url: `${base}/app`, baseUrl: base })).toBe(`${base}/app`);
+    expect(await redirect({ url: 'https://evil.test/x', baseUrl: base })).toBe(`${base}/app`);
+    expect(await redirect({ url: '//evil.test', baseUrl: base })).toBe(`${base}/app`);
+  });
+
+  it('signup_completed is emitted for new users only, with the method and no email', async () => {
+    const seen: AuthEvent[] = [];
+    setAuthAnalyticsSink((e) => seen.push(e));
+    const signInEvent = testConfig().events!.signIn!;
+    await signInEvent({
+      user: { email: 'a@example.com' },
+      account: { provider: 'google' },
+      isNewUser: true,
+    } as never);
+    await signInEvent({ user: {}, account: { provider: 'google' }, isNewUser: false } as never);
+    expect(seen).toEqual([{ name: 'signup_completed', properties: { method: 'google' } }]);
+    setAuthAnalyticsSink(() => undefined);
+  });
+
+  it('starting Google or Apple sign-in emits signup_started with the method only', async () => {
+    const seen: AuthEvent[] = [];
+    setAuthAnalyticsSink((e) => seen.push(e));
+    const start = vi.fn(async () => undefined);
+    await beginOAuthSignIn('google', start);
+    await beginOAuthSignIn('apple', start);
+    expect(seen).toEqual([
+      { name: 'signup_started', properties: { method: 'google' } },
+      { name: 'signup_started', properties: { method: 'apple' } },
+    ]);
+    expect(start.mock.calls).toEqual([['google'], ['apple']]);
+    setAuthAnalyticsSink(() => undefined);
+  });
+
+  it('the sign-in page starts OAuth through beginOAuthSignIn', () => {
+    expect(read('app/(auth)/sign-in/page.tsx')).toContain('beginOAuthSignIn(provider');
   });
 
   it('only same-site relative callback paths are accepted', () => {
@@ -473,6 +665,23 @@ describe('providers, analytics, redirects (CSN-050)', () => {
     expect(safeCallbackPath('//evil.test')).toBeUndefined();
     expect(safeCallbackPath('https://evil.test')).toBeUndefined();
     expect(safeCallbackPath('/\\evil.test')).toBeUndefined();
+    for (const bad of [
+      '/\t/evil.test',
+      '/\n/evil.test',
+      '/\r/evil.test',
+      '/\u0000/x',
+      '/\u007f/x',
+      '/%2fevil.test',
+      '/%2Fevil.test',
+      '/%5cevil.test',
+      '/%5Cevil.test',
+      '/%09/evil.test',
+      '/%0a/evil.test',
+      '/%00',
+    ]) {
+      expect(safeCallbackPath(bad), JSON.stringify(bad)).toBeUndefined();
+    }
+    expect(safeCallbackPath('/app/profile?tab=a%20b')).toBe('/app/profile?tab=a%20b');
     expect(safeCallbackPath(undefined)).toBeUndefined();
   });
 

@@ -16,6 +16,8 @@ Auth.js v5 with the Prisma adapter. One page (`/sign-in`) serves sign-up and log
 2. Set `RESEND_API_KEY` and `EMAIL_FROM` (for example `CoinSnipe <login@your-domain>`).
 3. The link is valid 15 minutes and works once. Limits: 5 per email address per hour and 20 per IP per hour.
 
+Client IP assumption: the per-IP limit assumes a trusted proxy in front of the app (Vercel). It uses `x-real-ip` when present, otherwise the last `x-forwarded-for` entry (the one the proxy appended); earlier entries are client-supplied and ignored. If the app is ever hosted without such a proxy, a client can pick its own IP bucket, and only the per-email limit still holds.
+
 Rate-limit storage: the default store is **in memory** (`lib/auth/rateLimit.ts`), so counts are per server instance and reset on restart; on Vercel the effective limit can be higher than the nominal one. There is no rate-limit table in the schema. To make it exact, add a table (database owner) or Redis and implement `RateLimitStore.hit()` against it.
 
 Local testing without Resend: point the Resend SDK at a local stub with `RESEND_BASE_URL=http://127.0.0.1:4010` (see `apps/web/e2e/auth.spec.ts`).
@@ -43,7 +45,9 @@ Needs an Apple Developer Program membership.
 `allowDangerousEmailAccountLinking` stays off. A Google or Apple login whose email matches an existing account is refused with a message asking the user to sign in with an email link first. Linking is explicit, from Profile:
 
 - `POST /api/v1/me/accounts/link` with `{"provider":"google"|"apple"}` (signed in, same-origin) returns the Auth.js URL to start the flow.
-- In the `signIn` callback (`auth.ts`), a provider login is accepted only when the provider reports the email as verified (`lib/auth/linking.ts`); while a session exists, Auth.js attaches the provider account to that session's user.
+- The `signIn` callback (`lib/auth/config.ts`, logic in `lib/auth/oauthSignIn.ts`) accepts a provider login only when the provider reports the email as verified (`lib/auth/linking.ts`).
+- Google: the callback is a normal GET, so the session cookie arrives and Auth.js attaches the provider account to that session's user.
+- Apple: the callback is a cross-site form POST, and browsers do not send the `SameSite=Lax` session cookie on it. For Apple the link route therefore also sets a link-intent cookie (`lib/auth/linkIntent.ts`): `__Secure-csn-link-intent`, HMAC-signed with `AUTH_SECRET`, `HttpOnly; Secure; SameSite=None`, path-limited to `/api/auth/callback/apple`, valid 10 minutes. The callback verifies it and links the Apple account to the user named in it (then redirects to `/app/profile?linked=apple`; failures go to `/app/profile?link_error=unverified-email|already-linked`, which the Profile page should show). This is covered by unit tests only; confirm it once with a real Apple login. `Secure` cookies need https (localhost counts as secure in Chrome and Firefox, not in Safari).
 
 ## Log out everywhere
 

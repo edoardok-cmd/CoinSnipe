@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { AuthError } from 'next-auth';
 import { auth, signIn } from '../../../auth';
+import { beginOAuthSignIn } from '../../../lib/auth/oauthStart';
 import { enabledProviders } from '../../../lib/auth/providers';
 import { errorMessage, safeCallbackPath, SIGN_IN_COPY } from '../../../lib/auth/signInCopy';
 
@@ -37,7 +38,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Searc
     'use server';
     const provider = String(formData.get('provider'));
     if (provider !== 'google' && provider !== 'apple') redirect('/sign-in?error=Default');
-    await signIn(provider, callback ? { redirectTo: callback } : {});
+    await beginOAuthSignIn(provider, (id) => signIn(id, callback ? { redirectTo: callback } : {}));
   }
 
   if (params.check) {

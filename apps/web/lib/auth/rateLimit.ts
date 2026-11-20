@@ -41,10 +41,17 @@ export function normalizeEmailKey(email: string): string {
   return email.trim().toLowerCase();
 }
 
-/** First entry of x-forwarded-for, else x-real-ip, else 'unknown' (one shared bucket). */
+/**
+ * Client IP for the per-IP limit. Assumes the app sits behind a proxy that sets x-real-ip or
+ * overwrites/appends x-forwarded-for (Vercel does). x-real-ip wins; otherwise the LAST
+ * x-forwarded-for entry is used, the one our own proxy appended, because earlier entries are
+ * client-supplied. Without any proxy header everyone shares the 'unknown' bucket.
+ */
 export function clientIp(headers: Headers): string {
-  const forwarded = headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-  return forwarded || headers.get('x-real-ip')?.trim() || 'unknown';
+  const real = headers.get('x-real-ip')?.trim();
+  if (real) return real;
+  const parts = headers.get('x-forwarded-for')?.split(',') ?? [];
+  return parts[parts.length - 1]?.trim() || 'unknown';
 }
 
 /** Both counters are always incremented, so a blocked caller keeps using up its own budget. */

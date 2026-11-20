@@ -42,5 +42,14 @@ export function safeCallbackPath(value: string | undefined): string | undefined 
   if (!value || !value.startsWith('/') || value.startsWith('//') || value.includes('\\')) {
     return undefined;
   }
+  // Browsers drop tabs and newlines inside URLs, so a tab between two slashes becomes a
+  // protocol-relative URL. Control characters and percent-encoded slashes, backslashes and
+  // control characters are refused for the same reason.
+  if (
+    [...value].some((ch) => ch.charCodeAt(0) < 0x20 || ch.charCodeAt(0) === 0x7f) ||
+    /%(2f|5c|[01][0-9a-f]|7f)/i.test(value)
+  ) {
+    return undefined;
+  }
   return value;
 }
