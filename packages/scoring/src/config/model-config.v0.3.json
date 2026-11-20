@@ -185,7 +185,18 @@
     "recentDays": 90,
     "strong": 7,
     "medium": 4,
-    "range": 0.25
+    "range": 0.25,
+    "binAtr": 0.25,
+    "binPercentile": 0.8,
+    "profileDays": [90, 365],
+    "reactionDays": 365,
+    "maDays": [50, 200],
+    "maWeeks": [200],
+    "roundMantissas": [1, 2.5, 5],
+    "roundTargetSteps": 10,
+    "roundBand": 0.3,
+    "roundBtcSteps": [5000, 10000],
+    "topStrikes": 5
   },
   "outlook": { "fuelUp": 20, "fuelDown": -20, "fragHigh": 66, "fragElev": 33 },
   "labels": [

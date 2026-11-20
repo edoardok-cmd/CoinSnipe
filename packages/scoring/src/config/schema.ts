@@ -111,10 +111,10 @@ const uniqueList = <T extends z.ZodType<string>>(item: T, what: string) =>
  * purpose).
  */
 export const PENDING_CONFIG_KEYS: Readonly<Record<string, string>> = {
-  'indicators.variant': 'CSN-036 (H1 RSI, H2 ATR, M6 ADX) and CSN-033 (ATR for zone merging)',
+  'indicators.variant': 'CSN-036 (H1 RSI, H2 ATR, M6 ADX); CSN-033 uses the textbook ATR only',
   'indicators.rsiPeriod': 'CSN-036 (H1)',
   'indicators.rsiWarmupBars': 'CSN-036 (H1)',
-  'indicators.atrPeriod': 'CSN-036 (H2) and CSN-033 (5.4 zone merging)',
+  'indicators.atrPeriod': 'CSN-036 (H2); CSN-033 (5.4 zone merging) already reads it',
   'indicators.adxPeriod': 'CSN-036 (M6)',
   'indicators.bollingerPeriod': 'CSN-036 (H4)',
   'indicators.bollingerK': 'CSN-036 (H4)',
@@ -122,12 +122,12 @@ export const PENDING_CONFIG_KEYS: Readonly<Record<string, string>> = {
   'indicators.volatilityDays': 'CSN-035 (R1)',
   'indicators.betaDays': 'CSN-036 (beta in S1)',
   'indicators.drawdownDays': 'CSN-035 (R2)',
-  'indicators.pivotBars': 'CSN-033 (K1)',
   'indicators.upDownVolumeDays': 'CSN-036 (M7)',
   'candles.short': 'CSN-036 (candles for horizonCandleIds)',
   'candles.medium': 'CSN-036 (candles for horizonCandleIds)',
   'candles.long': 'CSN-036 (candles for horizonCandleIds)',
-  'candles.weeklyBars': 'CSN-036 (weekly RSI) and CSN-033 (K1 weekly pivots)',
+  'candles.weeklyBars':
+    'CSN-036 (weekly RSI); CSN-033 (K1 weekly pivots, K3 weekly MA) already reads it',
   'candles.horizonCandleIds': "CSN-036 (which metrics use the horizon's candles; D-07)",
 };
 
@@ -350,8 +350,39 @@ export const modelConfigSchema = z
         strong: nonNegative,
         medium: nonNegative,
         range: share,
+        /** K2 bin width as a multiple of the daily ATR. */
+        binAtr: z.number().positive(),
+        /** K2 keeps local maxima above this percentile (0-1) of the bin volumes. */
+        binPercentile: share,
+        /** K2 windows in days (hourly candles, 24 per day). */
+        profileDays: z.array(z.number().int().positive()).min(1),
+        /** Reactions are counted over this many recent days. */
+        reactionDays: z.number().int().positive(),
+        /** K3 simple moving-average windows in daily bars. */
+        maDays: z.array(z.number().int().positive()).min(1),
+        /** K3 simple moving-average windows in weekly bars. */
+        maWeeks: z.array(z.number().int().positive()).min(1),
+        /** K4 step mantissas (each in [1, 10)); the step is mantissa x 10^n. */
+        roundMantissas: z.array(z.number().gte(1).lt(10)).min(1),
+        /** K4 aims for about this many steps across +-roundBand of the price. */
+        roundTargetSteps: z.number().positive(),
+        /** K4 band around the price used to pick the step (0.3 = +-30%). */
+        roundBand: z.number().positive().lt(1),
+        /** K4 steps for Bitcoin (every 5K and 10K). */
+        roundBtcSteps: z.array(z.number().positive()).min(1),
+        /** K5 keeps this many strikes with the largest open interest. */
+        topStrikes: z.number().int().positive(),
       })
-      .refine((l) => l.medium < l.strong, { message: 'levels medium must be below strong' }),
+      .refine((l) => l.medium < l.strong, { message: 'levels medium must be below strong' })
+      .refine((l) => new Set(l.maDays).size === l.maDays.length, {
+        message: 'levels maDays must not repeat a window',
+      })
+      .refine((l) => new Set(l.maWeeks).size === l.maWeeks.length, {
+        message: 'levels maWeeks must not repeat a window',
+      })
+      .refine((l) => new Set(l.profileDays).size === l.profileDays.length, {
+        message: 'levels profileDays must not repeat a window',
+      }),
     outlook: z
       .strictObject({
         fuelUp: z.number(),
