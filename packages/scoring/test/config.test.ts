@@ -416,6 +416,62 @@ describe('Level A config (CSN-031): market weather A1-A10 and alt season C1-C3',
     expect(MODEL_CONFIG_V0_3.market.corrFloor).toBe(0.3);
   });
 
+  it('Bitcoin outlook (CSN-032): the Lab label thresholds and the constants it hard-codes', () => {
+    const c = MODEL_CONFIG_V0_3;
+    expect(c.outlook).toEqual({ fuelUp: 20, fuelDown: -20, fragHigh: 66, fragElev: 33 });
+    expect(c.levelA.outlook).toEqual({
+      etfFullFlowBn: 3,
+      fragWeights: { funding: 0.4, openInterest: 0.3, liquidation: 0.15, sentiment: 0.15 },
+      fundingFull: 0.05,
+      openInterestFull: 30,
+      liquidationBandPct: 8,
+      halvingDate: '2024-04-20',
+      daysPerMonth: 30.44,
+      peakWindowMonths: [12, 18],
+      sentimentExtreme: { high: 80, low: 20 },
+      thinHistoryPeriods: 30,
+      longMaDays: 1400,
+    });
+    // D1-D4 proposed, D5 open (master plan 5.3).
+    expect(['D1', 'D2', 'D3', 'D4', 'D5'].map((id) => statusOf(c, id))).toEqual([
+      'proposed',
+      'proposed',
+      'proposed',
+      'proposed',
+      'open',
+    ]);
+  });
+
+  it('Bitcoin outlook config: invalid values are rejected', () => {
+    rejects((c) => (at(c, 'levelA.outlook').etfFullFlowBn = 0), /etfFullFlowBn/);
+    rejects((c) => (at(c, 'levelA.outlook').fundingFull = -1), /fundingFull/);
+    rejects((c) => (at(c, 'levelA.outlook').openInterestFull = 0), /openInterestFull/);
+    rejects((c) => (at(c, 'levelA.outlook').liquidationBandPct = 0), /liquidationBandPct/);
+    rejects((c) => (at(c, 'levelA.outlook').daysPerMonth = 0), /daysPerMonth/);
+    rejects((c) => (at(c, 'levelA.outlook').thinHistoryPeriods = 0), /thinHistoryPeriods/);
+    rejects((c) => (at(c, 'levelA.outlook').longMaDays = 1.5), /longMaDays/);
+    rejects((c) => (at(c, 'levelA.outlook').halvingDate = '20 April 2024'), /halvingDate/);
+    rejects((c) => (at(c, 'levelA.outlook').halvingDate = '2024-13-45'), /not a valid date/);
+    rejects((c) => (at(c, 'levelA.outlook').peakWindowMonths = [18, 12]), /peakWindowMonths/);
+    rejects(
+      (c) => (at(c, 'levelA.outlook').sentimentExtreme = { high: 20, low: 80 }),
+      /sentimentExtreme low must be below high/,
+    );
+    rejects(
+      (c) =>
+        (at(c, 'levelA.outlook').fragWeights = {
+          funding: 0,
+          openInterest: 0,
+          liquidation: 0,
+          sentiment: 0,
+        }),
+      /at least one weight/,
+    );
+    rejects((c) => (at(c, 'levelA.outlook.fragWeights').funding = -0.1), /fragWeights\.funding/);
+    rejects((c) => (at(c, 'levelA.outlook').bogus = 1), /Unrecognized key/);
+    rejects((c) => delete at(c, 'levelA.outlook').halvingDate, /halvingDate/);
+  });
+
   it('ships no Score Lab fixed-scale constant in the model config', () => {
     expect(MODEL_CONFIG_V0_3.levelA.subScore.fixedScale).toBeNull();
     expect(JSON.stringify(rawConfig)).not.toMatch(/"unit"/);

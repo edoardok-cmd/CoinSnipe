@@ -228,6 +228,52 @@ const levelASchema = z.strictObject({
     /** C1: stablecoin symbols left out of the top alts (the data layer can also flag them). */
     stablecoins: uniqueList(z.string().min(1), 'stablecoin'),
   }),
+  /**
+   * Bitcoin outlook parameters the Lab hard-codes (CSN-032; status proposed with D1-D4, D5 open).
+   * The label thresholds themselves (fuelUp, fuelDown, fragHigh, fragElev) stay in the Lab-named
+   * top-level `outlook` section. The regime rule reuses `market.trend` (50/200-day averages, 14-day slope).
+   */
+  outlook: z
+    .strictObject({
+      /** D1: the 20-day ETF flow, in billions of USD, that scores a full +-100 in Fuel. */
+      etfFullFlowBn: z.number().positive(),
+      /** Fragility part weights; parts without data are dropped and the rest reweighted. */
+      fragWeights: z
+        .strictObject({
+          funding: weight,
+          openInterest: weight,
+          liquidation: weight,
+          sentiment: weight,
+        })
+        .refine(hasPositiveSum, positiveSumMessage),
+      /** A3 funding (percent per 8 hours) that scores a full 100 in Fragility. */
+      fundingFull: z.number().positive(),
+      /** A3 open-interest 30-day change (percent) that scores a full 100 in Fragility. */
+      openInterestFull: z.number().positive(),
+      /** D4: a liquidation cluster this close to the price (percent) or closer scores above 0. */
+      liquidationBandPct: z.number().positive(),
+      /** D2: the last halving, 'YYYY-MM-DD'. */
+      halvingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'halvingDate must be YYYY-MM-DD'),
+      /** D2: days in a month for months since the halving. */
+      daysPerMonth: z.number().positive(),
+      /** D2: months after a halving in which past peaks came [from, to]. */
+      peakWindowMonths: z.tuple([nonNegative, nonNegative]),
+      /** D3: Fear & Greed above `high` or below `low` is an extreme. */
+      sentimentExtreme: z.strictObject({ high: score100, low: score100 }),
+      /** Base rates with fewer independent periods than this read as thin history. */
+      thinHistoryPeriods: positiveInt,
+      /** Daily closes in the 200-week average (1400). */
+      longMaDays: positiveInt,
+    })
+    .refine((o) => o.peakWindowMonths[0] < o.peakWindowMonths[1], {
+      message: 'peakWindowMonths must be [from, to] with from < to',
+    })
+    .refine((o) => o.sentimentExtreme.low < o.sentimentExtreme.high, {
+      message: 'sentimentExtreme low must be below high',
+    })
+    .refine((o) => !Number.isNaN(Date.parse(`${o.halvingDate}T00:00:00Z`)), {
+      message: 'halvingDate is not a valid date',
+    }),
 });
 
 export const modelConfigSchema = z

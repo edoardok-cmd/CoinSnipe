@@ -305,7 +305,11 @@ period keys apply to both variants. `returns` and the `candles` keys are indepen
 - **5.3 (CSN-032):** the plan builds Regime from "A1 Bitcoin trend + price vs 200-week MA". The
   Lab's regime rule (line 675) uses the 200D MA and the 50D slope only. The plan wants base rates
   for 9 Regime x Fuel states, but the Lab computes them by regime alone (line 690, marked there as
-  a sample simplification).
+  a sample simplification). **CSN-032 handling:** the Lab's regime rule is kept (golden parity)
+  and the price vs the 200-week average is reported next to it (`regime.vs200w`) without moving
+  the label; base rates are an input from CSN-040 (history line reads "History not yet computed"
+  until then), and the Regime x Fuel state of the rates must match today's or they are not shown.
+  The Lab scores a missing D4 as 0; the engine drops it and reweights.
 - **7.5 (CSN-037):**
   - P2: the plan says "Fees growth minus price change, 90D; P/F vs sector median". The Lab uses
     revenue growth and revenue yield (line 654).

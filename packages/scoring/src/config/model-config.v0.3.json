@@ -1,6 +1,6 @@
 {
   "model_version": "0.3",
-  "description": "CoinSnipe scoring model v0.3. Every weight and threshold is a model parameter taken from the Score Lab v0.3 DEFAULT_CONFIG (2026-10-23) and the master plan v0.3 (Oct 10, 2026), except the weights inside the Level A inputs A3, A4, A6 and A7 (levelA.market.parts), which the plan does not give and which follow the Score Lab's formula coefficients pending a user decision (DISCREPANCIES.md); all are status proposed until the backtest (CSN-040) marks them agreed. Key names follow the Lab so a Lab 'Copy config' JSON maps 1:1 (cycle.dex is the list of gold tokens excluded from the alt-season index). Added in CSN-030: metricSpec, normalization, candles, indicators and status. Added in CSN-031: levelA (sub-score method, measure weights inside each Level A input, A1/A3/A8/A9/A10 parameters, alt-season windows). Contains no market data.",
+  "description": "CoinSnipe scoring model v0.3. Every weight and threshold is a model parameter taken from the Score Lab v0.3 DEFAULT_CONFIG (2026-10-23) and the master plan v0.3 (Oct 10, 2026), except the weights inside the Level A inputs A3, A4, A6 and A7 (levelA.market.parts), which the plan does not give and which follow the Score Lab's formula coefficients pending a user decision (DISCREPANCIES.md); all are status proposed until the backtest (CSN-040) marks them agreed. Key names follow the Lab so a Lab 'Copy config' JSON maps 1:1 (cycle.dex is the list of gold tokens excluded from the alt-season index). Added in CSN-030: metricSpec, normalization, candles, indicators and status. Added in CSN-031: levelA (sub-score method, measure weights inside each Level A input, A1/A3/A8/A9/A10 parameters, alt-season windows). Added in CSN-032: levelA.outlook (the Bitcoin-outlook constants the Lab hard-codes: D1 full-scale flow, fragility part weights and scales, D2 halving date and peak window, D3 extremes, thin-history cut-off), all proposed with D1-D4 and D5 open. Contains no market data.",
   "quality": { "U": 30, "E": 20, "T": 20, "L": 10, "R": 20 },
   "timing": {
     "short": { "M": 60, "S": 40 },
@@ -124,6 +124,24 @@
         "LUSD",
         "BUSD"
       ]
+    },
+    "outlook": {
+      "etfFullFlowBn": 3,
+      "fragWeights": {
+        "funding": 0.4,
+        "openInterest": 0.3,
+        "liquidation": 0.15,
+        "sentiment": 0.15
+      },
+      "fundingFull": 0.05,
+      "openInterestFull": 30,
+      "liquidationBandPct": 8,
+      "halvingDate": "2024-04-20",
+      "daysPerMonth": 30.44,
+      "peakWindowMonths": [12, 18],
+      "sentimentExtreme": { "high": 80, "low": 20 },
+      "thinHistoryPeriods": 30,
+      "longMaDays": 1400
     }
   },
   "sector": {
