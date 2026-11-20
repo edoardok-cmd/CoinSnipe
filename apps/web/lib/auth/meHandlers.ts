@@ -4,12 +4,15 @@
  */
 import { jsonError, isSameOrigin, NO_STORE } from './requestGuards';
 import { logOutEverywhere, type SessionStore } from './sessions';
+import { LINK_INTENT_CLEAR_COOKIE } from './linkIntent';
 import { SECURE_SESSION_COOKIE_NAME, SESSION_COOKIE_NAME } from './cookies';
 import { isOAuthProvider, type OAuthProviderId } from './providers';
 
 export const SESSION_CLEAR_COOKIES: readonly string[] = [
   `${SESSION_COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`,
   `${SECURE_SESSION_COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`,
+  // A pending Apple link intent must not outlive the sessions it was issued for.
+  LINK_INTENT_CLEAR_COOKIE,
 ];
 
 export interface MeDeps {

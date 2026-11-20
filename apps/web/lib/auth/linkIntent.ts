@@ -12,7 +12,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
 export const LINK_INTENT_COOKIE = '__Secure-csn-link-intent';
 export const LINK_INTENT_PATH = '/api/auth/callback/apple';
-export const LINK_INTENT_MAX_AGE_SECONDS = 10 * 60;
+export const LINK_INTENT_MAX_AGE_SECONDS = 5 * 60;
 
 const mac = (secret: string, body: string): string =>
   createHmac('sha256', secret).update(body).digest('base64url');
@@ -58,3 +58,32 @@ export function linkIntentSetCookie(secret: string, userId: string, now: number)
 }
 
 export const LINK_INTENT_CLEAR_COOKIE = `${LINK_INTENT_COOKIE}=; ${ATTRS}; Max-Age=0`;
+
+/** Set-Cookie for the link route: only Apple needs it, and only when AUTH_SECRET is set. */
+export function linkIntentCookieFor(
+  userId: string,
+  provider: string,
+  env: Record<string, string | undefined>,
+  now: number,
+): string | null {
+  const secret = env['AUTH_SECRET'];
+  return provider === 'apple' && secret ? linkIntentSetCookie(secret, userId, now) : null;
+}
+
+/** User id named by a valid link-intent cookie value, or null. Used by the signIn callback. */
+export function readIntentUserId(
+  cookieValue: string | undefined,
+  env: Record<string, string | undefined>,
+  now: number,
+): string | null {
+  return verifyLinkIntentValue(env['AUTH_SECRET'] ?? '', cookieValue, now);
+}
+
+/** Options for expiring the cookie through next/headers; same attributes as LINK_INTENT_CLEAR_COOKIE. */
+export const LINK_INTENT_CLEAR_OPTIONS = {
+  path: LINK_INTENT_PATH,
+  httpOnly: true,
+  secure: true,
+  sameSite: 'none',
+  maxAge: 0,
+} as const;

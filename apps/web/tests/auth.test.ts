@@ -346,6 +346,7 @@ describe('log out everywhere (CSN-050)', () => {
     expect(res.headers.getSetCookie()).toEqual([
       'authjs.session-token=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax',
       '__Secure-authjs.session-token=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax',
+      '__Secure-csn-link-intent=; Path=/api/auth/callback/apple; HttpOnly; Secure; SameSite=None; Max-Age=0',
     ]);
   });
 
@@ -463,7 +464,7 @@ describe('explicit provider linking (CSN-050)', () => {
     const [cookie] = res.headers.getSetCookie();
     expect(res.headers.getSetCookie()).toHaveLength(1);
     expect(cookie).toMatch(
-      /^__Secure-csn-link-intent=[^;]+; Path=\/api\/auth\/callback\/apple; HttpOnly; Secure; SameSite=None; Max-Age=600$/,
+      /^__Secure-csn-link-intent=[^;]+; Path=\/api\/auth\/callback\/apple; HttpOnly; Secure; SameSite=None; Max-Age=300$/,
     );
     const value = cookie!.split(';')[0]!.split('=').slice(1).join('=');
     expect(verifyLinkIntentValue(SECRET, value, NOW + 1000)).toBe('u1');
@@ -471,9 +472,9 @@ describe('explicit provider linking (CSN-050)', () => {
 
   describe('link intent cookie', () => {
     const value = createLinkIntentValue(SECRET, 'u1', NOW);
-    it('verifies, expires after 10 minutes, and rejects tampering or another secret', () => {
-      expect(verifyLinkIntentValue(SECRET, value, NOW + 599_000)).toBe('u1');
-      expect(verifyLinkIntentValue(SECRET, value, NOW + 600_001)).toBeNull();
+    it('verifies, expires after 5 minutes, and rejects tampering or another secret', () => {
+      expect(verifyLinkIntentValue(SECRET, value, NOW + 299_000)).toBe('u1');
+      expect(verifyLinkIntentValue(SECRET, value, NOW + 300_001)).toBeNull();
       expect(verifyLinkIntentValue('other-secret', value, NOW)).toBeNull();
       const [body, sig] = value.split('.');
       const forged = Buffer.from(JSON.stringify({ u: 'victim', e: NOW + 1e9, n: 'x' })).toString(

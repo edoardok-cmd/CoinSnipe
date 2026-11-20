@@ -1,6 +1,6 @@
 import { enabledProviders } from '../../../../../../lib/auth/providers';
 import { handleLinkProvider } from '../../../../../../lib/auth/meHandlers';
-import { linkIntentSetCookie } from '../../../../../../lib/auth/linkIntent';
+import { linkIntentCookieFor } from '../../../../../../lib/auth/linkIntent';
 import { requireSessionUserId } from '../../../../../../lib/auth/session';
 import { signIn } from '../../../../../../auth';
 
@@ -19,9 +19,7 @@ export async function POST(request: Request): Promise<Response> {
     isEnabled: (provider) => enabledProviders(process.env).includes(provider),
     // Apple's callback is a cross-site POST without the Lax session cookie: carry the intent.
     linkIntentCookie: (userId, provider) =>
-      provider === 'apple' && process.env.AUTH_SECRET
-        ? linkIntentSetCookie(process.env.AUTH_SECRET, userId, Date.now())
-        : null,
+      linkIntentCookieFor(userId, provider, process.env, Date.now()),
     startLink: async (provider) =>
       (await signIn(provider, { redirect: false, redirectTo: '/app/profile' })) as string,
   });

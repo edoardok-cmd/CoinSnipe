@@ -9,7 +9,11 @@ import { Resend as ResendClient } from 'resend';
 import { prisma } from '@coinsnipe/db';
 import { withTokenMinimisation } from './lib/auth/adapter';
 import { buildAuthConfig } from './lib/auth/config';
-import { LINK_INTENT_COOKIE, verifyLinkIntentValue } from './lib/auth/linkIntent';
+import {
+  LINK_INTENT_CLEAR_OPTIONS,
+  LINK_INTENT_COOKIE,
+  readIntentUserId,
+} from './lib/auth/linkIntent';
 import { sendMagicLink } from './lib/auth/magicLinkSender';
 import { enabledProviders } from './lib/auth/providers';
 import { defaultRateLimitStore } from './lib/auth/rateLimit';
@@ -72,23 +76,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth(
     // A session at the signIn callback means the user started this from Profile.
     getSessionUserId: async () => (await auth())?.user?.id ?? null,
     getIntentUserId: async () =>
-      verifyLinkIntentValue(
-        process.env.AUTH_SECRET ?? '',
-        (await cookies()).get(LINK_INTENT_COOKIE)?.value,
-        Date.now(),
-      ),
+      readIntentUserId((await cookies()).get(LINK_INTENT_COOKIE)?.value, process.env, Date.now()),
     consumeIntent: async () => {
       // Best effort: the callback runs inside the Auth.js route handler, where cookies are writable.
       try {
-        (await cookies()).set(LINK_INTENT_COOKIE, '', {
-          path: '/api/auth/callback/apple',
-          httpOnly: true,
-          secure: true,
-          sameSite: 'none',
-          maxAge: 0,
-        });
+        (await cookies()).set(LINK_INTENT_COOKIE, '', LINK_INTENT_CLEAR_OPTIONS);
       } catch {
-        // The 10 minute expiry bounds a leftover cookie; ignore.
+        // The 5 minute expiry bounds a leftover cookie; ignore.
       }
     },
     linkAccount: async (userId, account) => {
