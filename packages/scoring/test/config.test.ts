@@ -598,4 +598,30 @@ describe('Level A config (CSN-031): market weather A1-A10 and alt season C1-C3',
     expect(parsed.levelA.cycle.topN).toBe(30);
     expect(parsed.levelA.market.corrMissing).toBe('floor');
   });
+  it('Level B (CSN-034): the sector-pulse constants beside the Lab keys', () => {
+    const c = MODEL_CONFIG_V0_3;
+    expect(c.levelB).toEqual({
+      minMembers: 3,
+      slopeDays: 14,
+      returnDays: { short: 7, long: 30 },
+      returnWeights: { short: 40, long: 60 },
+      breadthMaDays: 50,
+      volumeDays: { short: 7, long: 30 },
+      leaders: { count: 3, minQuality: 50 },
+      seasonAdjust: 10,
+    });
+    expect(['B1', 'B2', 'B3', 'B4', 'B5'].map((id) => statusOf(c, id))).toEqual(
+      Array(5).fill('proposed'),
+    );
+    rejects((c) => delete c.levelB, /levelB/);
+    rejects((c) => (at(c, 'levelB').extra = 1), /Unrecognized key/);
+    rejects((c) => (at(c, 'levelB').minMembers = 0), /minMembers/);
+    rejects((c) => (at(c, 'levelB').slopeDays = 1.5), /slopeDays/);
+    rejects((c) => (at(c, 'levelB.returnWeights').long = 50), /B1 return weights/);
+    rejects((c) => (at(c, 'levelB.leaders').minQuality = 101), /minQuality/);
+    rejects((c) => (at(c, 'levelB').seasonAdjust = -1), /seasonAdjust/);
+    const c2 = raw();
+    at(c2, 'levelB').minMembers = 5;
+    expect(parseModelConfig(c2).levelB.minMembers).toBe(5);
+  });
 });

@@ -22,3 +22,5 @@ export * from './levels/keyLevels';
 export * from './levelA/outlookSentence';
 export * from './levelA/scenarios';
 export * from './levelA/bitcoinOutlook';
+export * from './levelB/phase';
+export * from './levelB/sectorPulse';
