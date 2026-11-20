@@ -276,8 +276,14 @@ describe('config schema rejects bad input', () => {
 
 describe('indicators and candles: contract until a consumer wires them (PENDING_CONFIG_KEYS)', () => {
   // Keys a task has wired and removed from PENDING_CONFIG_KEYS, with the code that reads them.
-  // CSN-033: levels/methods.ts (K1 pivotBars). CSN-031: levelA/marketWeather.ts (macro scaling). `returns` is also read by CSN-035/036 later.
-  const WIRED = ['indicators.correlationDays', 'indicators.returns', 'indicators.pivotBars'];
+  // CSN-033: levels/*.ts (K1 pivotBars, atrPeriod for zone merging, weeklyBars). CSN-031: levelA/marketWeather.ts (macro scaling). `returns` is also read by CSN-035/036 later.
+  const WIRED = [
+    'indicators.correlationDays',
+    'indicators.returns',
+    'indicators.pivotBars',
+    'indicators.atrPeriod',
+    'candles.weeklyBars',
+  ];
 
   it('lists every indicators and candles key with the task that will read it', () => {
     const keys = [

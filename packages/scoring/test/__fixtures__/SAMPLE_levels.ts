@@ -60,3 +60,27 @@ export function SAMPLE_hourlyProfile(
   for (let i = 0; i < heavy; i++) out.push({ open: at, high: at, low: at, close: at, volume: 100 });
   return out;
 }
+
+/** Seeded random walk (LCG, so the same on every run): `n` days, daily volatility `vol`. */
+export function SAMPLE_randomWalk(
+  n: number,
+  seed: number,
+  start: number,
+  vol: number,
+): SampleSeries {
+  let state = seed >>> 0;
+  const next = () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 2 ** 32;
+  };
+  const daily: Candle[] = [];
+  let prev = start;
+  for (let i = 0; i < n; i++) {
+    const close = prev * (1 + vol * (next() * 2 - 1));
+    const high = Math.max(prev, close) * (1 + (vol / 2) * next());
+    const low = Math.min(prev, close) * (1 - (vol / 2) * next());
+    daily.push({ open: prev, high, low, close, volume: 100 + 50 * next() });
+    prev = close;
+  }
+  return { daily, dates: sampleDates(n) };
+}

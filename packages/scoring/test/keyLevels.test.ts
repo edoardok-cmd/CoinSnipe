@@ -19,6 +19,7 @@ import {
 import {
   SAMPLE_flat,
   SAMPLE_hourlyProfile,
+  SAMPLE_randomWalk,
   SAMPLE_rising,
   SAMPLE_withCandle,
   sampleCandle,
@@ -169,6 +170,41 @@ describe('zone merging', () => {
     expect(zoneAt(r, 81_000)!.methods).toEqual(['K5']);
     expect(zoneAt(r, 80_000)!.methods).toEqual(['K4']);
   });
+});
+
+describe('zone width on dense candidate runs', () => {
+  it('a zone is never wider than 0.5 x ATR, however dense the candidates', () => {
+    // Strikes every 200 from 90000 to 94000 (a dense run, each within 0.5 x ATR = 500 of the next).
+    const dense = Array.from({ length: 21 }, (_, k) => ({
+      strike: 90_000 + 200 * k,
+      openInterest: 100 - k,
+    }));
+    const r = computeKeyLevels(
+      btc({
+        optionsStrikes: dense,
+        liquidationClusters: dense.map((d) => ({ price: d.strike + 50 })),
+      }),
+      cfg,
+    );
+    const gap = cfg.levels.mergeAtr * r.atr;
+    for (const z of r.zones) expect(z.high - z.low).toBeLessThanOrEqual(gap + 1e-9);
+    // Only the top 5 strikes survive K5; the 21 K6 clusters form the dense run and split up.
+    expect(r.zones.filter((z) => z.low >= 90_000 && z.high <= 95_000).length).toBeGreaterThan(3);
+  });
+
+  it.each([1, 2, 3, 4, 5, 6, 7, 8])(
+    'seeded realistic series %i: bounded zones, price outside every zone, 2 supports and 2 resistances',
+    (seed) => {
+      const s = SAMPLE_randomWalk(1000, seed, 60_000, 0.04);
+      const r = computeKeyLevels({ asset: 'BTC', ...s }, cfg);
+      const gap = cfg.levels.mergeAtr * r.atr;
+      for (const z of r.zones) expect(z.high - z.low).toBeLessThanOrEqual(gap + 1e-9);
+      expect(r.supports).toHaveLength(2);
+      if (r.resistanceNote === null) expect(r.resistances).toHaveLength(2);
+      for (const z of [...r.supports, ...r.resistances])
+        expect(r.price < z.low || r.price > z.high).toBe(true);
+    },
+  );
 });
 
 describe('strength points', () => {
@@ -417,6 +453,17 @@ describe('input validation and wording', () => {
     expect(() =>
       detectKeyLevelBreaksSG12({ asset: 'BTC', ...SAMPLE_flat(1, 100, 1) }, cfg),
     ).toThrow(RangeError);
+  });
+
+  it('rejects a non-finite candle value with a clear message', () => {
+    const s = SAMPLE_withCandle(SAMPLE_flat(400, 100, 1), 50, { high: Number.NaN });
+    expect(() => computeKeyLevels({ asset: 'BTC', ...s }, cfg)).toThrow(
+      /candle 50 has a non-finite high/,
+    );
+    const inf = SAMPLE_withCandle(SAMPLE_flat(400, 100, 1), 399, { close: Infinity });
+    expect(() => detectKeyLevelBreaksSG12({ asset: 'BTC', ...inf }, cfg)).toThrow(
+      /non-finite close/,
+    );
   });
 
   it('is educational: no advisory wording in any label or text', () => {

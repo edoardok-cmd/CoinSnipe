@@ -3,8 +3,10 @@
  * SG12 breaks detector.
  *
  * Levels are zones, never exact lines. Candidates from K1-K7 are sorted and merged into one zone
- * when each lies within `levels.mergeAtr` x ATR (daily, `indicators.atrPeriod`) of the previous
- * one (low = min, high = max). Strength points:
+ * while they lie within `levels.mergeAtr` x ATR (daily, `indicators.atrPeriod`) of the zone's
+ * lowest candidate (low = min, high = max), so a zone is never wider than that. Candidates below
+ * the price and at or above it are merged separately, so the price is never inside a zone: a
+ * zone below it is a support, a zone at or above it a resistance. Strength points:
  *   `levels.methodPts` per distinct method in the zone (K8 is never a candidate, so never counts)
  *   + 1 per price reaction in the last `levels.reactionDays` days, at most `levels.reactMax`
  *     (a reaction is a daily candle whose high or low enters the zone and whose close is back out
@@ -48,7 +50,11 @@ export type ZoneSide = 'support' | 'resistance';
 export interface KeyLevelsInput {
   /** Ticker symbol. K5, K6 and K8 apply to BTC and ETH only, K7 to BTC only. */
   readonly asset: string;
-  /** Daily candles, oldest first, last = the scoring day. */
+  /**
+   * Daily candles, oldest first, last = the scoring day. Pass the FULL available history: the
+   * all-time-high case ('No earlier price above this') is judged against the supplied candles
+   * only, so a short window reports a local high, not an all-time one.
+   */
   readonly daily: readonly Candle[];
   /** ISO dates (YYYY-MM-DD), parallel to `daily`. */
   readonly dates: readonly string[];
@@ -119,7 +125,14 @@ function candidatesFor(
   );
 }
 
-/** Merge sorted candidates into zones: a candidate within mergeAtr x ATR of the zone high joins. */
+/**
+ * Merge sorted candidates into zones. A zone is anchored on its lowest candidate and a candidate
+ * joins while it lies within mergeAtr x ATR of that anchor, so no zone is wider than
+ * mergeAtr x ATR and any two candidates in a zone are within mergeAtr x ATR of each other.
+ * (Chaining off the growing zone high would let a dense run of candidates become one very wide
+ * zone with the price inside it. The Score Lab reference chains; this bounds the width on
+ * purpose, per the CSN-033 task review F1.)
+ */
 function mergeCandidates(
   candidates: readonly Candidate[],
   gap: number,
@@ -128,8 +141,8 @@ function mergeCandidates(
   const zones: { low: number; high: number; methods: CandidateMethod[] }[] = [];
   for (const c of sorted) {
     const z = zones[zones.length - 1];
-    if (z && c.price - z.high <= gap) {
-      z.high = Math.max(z.high, c.price);
+    if (z && c.price - z.low <= gap) {
+      z.high = c.price;
       if (!z.methods.includes(c.method)) z.methods.push(c.method);
     } else zones.push({ low: c.price, high: c.price, methods: [c.method] });
   }
@@ -175,7 +188,7 @@ function scoreZone(
   const points =
     raw.methods.length * config.levels.methodPts + reactions + (touchedRecently ? 1 : 0);
   const strength = strengthOf(points, config);
-  const side: ZoneSide = (low + high) / 2 < price ? 'support' : 'resistance';
+  const side: ZoneSide = high < price ? 'support' : 'resistance';
   return {
     low,
     high,
@@ -194,6 +207,11 @@ function validate(input: KeyLevelsInput): void {
   if (input.daily.length === 0) throw new RangeError('keyLevels: daily candles are required');
   if (input.dates.length !== input.daily.length)
     throw new RangeError('keyLevels: dates must be parallel to daily candles');
+  input.daily.forEach((c, k) => {
+    for (const f of ['open', 'high', 'low', 'close', 'volume'] as const)
+      if (!Number.isFinite(c[f]))
+        throw new RangeError(`keyLevels: daily candle ${k} has a non-finite ${f}`);
+  });
 }
 
 /** Zones and the nearest-two selection, as of the last daily candle. */
@@ -209,7 +227,17 @@ export function computeKeyLevels(
     throw new RangeError('keyLevels: not enough daily history for the ATR');
   const gap = config.levels.mergeAtr * a;
   const candidates = candidatesFor(input, price, a, config);
-  const zones = mergeCandidates(candidates, gap).map((z) => scoreZone(z, price, input, config));
+  // Candidates are merged separately below and at/above the price, so no zone contains the price.
+  const zones = [
+    ...mergeCandidates(
+      candidates.filter((c) => c.price < price),
+      gap,
+    ),
+    ...mergeCandidates(
+      candidates.filter((c) => c.price >= price),
+      gap,
+    ),
+  ].map((z) => scoreZone(z, price, input, config));
 
   const supports = zones
     .filter((z) => z.side === 'support')

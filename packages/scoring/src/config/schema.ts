@@ -103,6 +103,9 @@ const uniqueList = <T extends z.ZodType<string>>(item: T, what: string) =>
  * `rsiPeriod`, `atrPeriod` and `adxPeriod` apply to both variants. `returns` and the `candles`
  * keys are independent of `variant`.
  *
+ * `indicators.atrPeriod` and `candles.weeklyBars` are read by CSN-033 (levels/*.ts) and so are not
+ * listed; CSN-036 (H2 ATR, weekly RSI) will read them too.
+ *
  * `indicators.returns` is already read by the Level A macro-scaling correlation (CSN-031) and so
  * is not listed; CSN-035 (R1) and CSN-036 (beta in S1) will read it too.
  *
@@ -114,7 +117,6 @@ export const PENDING_CONFIG_KEYS: Readonly<Record<string, string>> = {
   'indicators.variant': 'CSN-036 (H1 RSI, H2 ATR, M6 ADX); CSN-033 uses the textbook ATR only',
   'indicators.rsiPeriod': 'CSN-036 (H1)',
   'indicators.rsiWarmupBars': 'CSN-036 (H1)',
-  'indicators.atrPeriod': 'CSN-036 (H2); CSN-033 (5.4 zone merging) already reads it',
   'indicators.adxPeriod': 'CSN-036 (M6)',
   'indicators.bollingerPeriod': 'CSN-036 (H4)',
   'indicators.bollingerK': 'CSN-036 (H4)',
@@ -126,8 +128,6 @@ export const PENDING_CONFIG_KEYS: Readonly<Record<string, string>> = {
   'candles.short': 'CSN-036 (candles for horizonCandleIds)',
   'candles.medium': 'CSN-036 (candles for horizonCandleIds)',
   'candles.long': 'CSN-036 (candles for horizonCandleIds)',
-  'candles.weeklyBars':
-    'CSN-036 (weekly RSI); CSN-033 (K1 weekly pivots, K3 weekly MA) already reads it',
   'candles.horizonCandleIds': "CSN-036 (which metrics use the horizon's candles; D-07)",
 };
 
