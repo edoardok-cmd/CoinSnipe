@@ -19,3 +19,6 @@ export * from './levelA/altSeason';
 export type { Measure as LevelAMeasure, MeasureResult, MissingReason } from './levelA/subScore';
 export * from './levels/methods';
 export * from './levels/keyLevels';
+export * from './levelA/outlookSentence';
+export * from './levelA/scenarios';
+export * from './levelA/bitcoinOutlook';

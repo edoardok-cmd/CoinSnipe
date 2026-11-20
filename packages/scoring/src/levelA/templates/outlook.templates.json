@@ -1,0 +1,130 @@
+{
+  "version": 1,
+  "headline": "{regime}, fuel {fuel}, fragility {fragility}.",
+  "regime": {
+    "Uptrend": "Bitcoin is above its 200-day average and its 50-day average is rising.",
+    "Range": "Bitcoin's price and its 50-day average are not pointing the same way, so there is no clear trend.",
+    "Downtrend": "Bitcoin is below its 200-day average and its 50-day average is falling."
+  },
+  "fuel": {
+    "Rising": "Money available to flow into crypto is growing, judged by stablecoin supply, global money supply, the dollar and, when connected, ETF flows.",
+    "Flat": "Money available to flow into crypto is little changed, judged by stablecoin supply, global money supply, the dollar and, when connected, ETF flows.",
+    "Falling": "Money available to flow into crypto is shrinking, judged by stablecoin supply, global money supply, the dollar and, when connected, ETF flows."
+  },
+  "fragility": {
+    "Low": "Few traders are borrowing heavily and sentiment is not at an extreme, so sharp drops are less likely than usual.",
+    "Elevated": "Borrowing or sentiment is above normal, so sharp drops are somewhat more likely than usual.",
+    "High": "Many traders are borrowing heavily or sentiment is at an extreme, so sharp drops are more likely than usual."
+  },
+  "levels": {
+    "intro": "Levels to watch:",
+    "support": "support {zone} ({strength}).",
+    "noSupport": "no support zone found below the price.",
+    "resistanceTwo": "Resistance {first}, then {second}.",
+    "resistanceOne": "Resistance {first}.",
+    "resistanceNone": "No resistance zone found above the price.",
+    "resistanceAllTimeHigh": "No earlier price above this.",
+    "unavailable": "Levels to watch: not available yet."
+  },
+  "history": {
+    "pending": "History not yet computed.",
+    "ready": "In similar conditions Bitcoin was higher 90 days later in {higher}% of cases, but fell more than 20% along the way in {fell}%. Based on {n} independent periods.",
+    "thinNote": "Thin history: fewer than {min} independent periods, so read these rates with care."
+  },
+  "drivers": {
+    "D1": {
+      "name": "Spot ETF flows, 20-day sum",
+      "tells": "Institutional money coming in or going out.",
+      "source": "DefiLlama Pro (paid)",
+      "leads": "Same time, with momentum",
+      "states": {
+        "inflow": "Money is flowing into Bitcoin ETFs.",
+        "outflow": "Money is flowing out of Bitcoin ETFs.",
+        "flat": "Money going into and out of Bitcoin ETFs is about even.",
+        "unavailable": "ETF flow data is not connected yet, so Fuel is read without it."
+      }
+    },
+    "D2": {
+      "name": "Halving-cycle position",
+      "tells": "Months since the last halving (April 2024).",
+      "source": "Calendar",
+      "leads": "Slow background",
+      "states": {
+        "early": "Fewer than {from} months since the last halving.",
+        "inWindow": "Between {from} and {to} months since the last halving, the stretch in which past peaks came.",
+        "late": "More than {to} months since the last halving, past the stretch in which past peaks came.",
+        "unavailable": "The halving-cycle position is not available."
+      }
+    },
+    "D3": {
+      "name": "Sentiment extremes",
+      "tells": "Fear & Greed above 80 or below 20. Extreme greed has often come near tops, extreme fear near bottoms.",
+      "source": "alternative.me (free)",
+      "leads": "Contrarian",
+      "states": {
+        "extremeGreed": "Fear & Greed is in extreme greed, which has often come near tops.",
+        "extremeFear": "Fear & Greed is in extreme fear, which has often come near bottoms.",
+        "neutral": "Fear & Greed is not at an extreme.",
+        "unavailable": "Fear & Greed data is not available."
+      }
+    },
+    "D4": {
+      "name": "Liquidation clusters",
+      "tells": "Prices where many leveraged bets get force-closed.",
+      "source": "CoinGlass Standard (paid)",
+      "leads": "Warns before sharp moves",
+      "states": {
+        "near": "A liquidation cluster sits close to the price, and price is often pulled toward these.",
+        "far": "No liquidation cluster sits close to the price.",
+        "unavailable": "Liquidation data is not connected yet, so Fragility is read without it."
+      }
+    },
+    "D5": {
+      "name": "Long-term holder behaviour",
+      "tells": "Old coins moving to exchanges near tops, accumulation in fear.",
+      "source": "Glassnode or CryptoQuant (paid)",
+      "leads": "Leads at turning points",
+      "states": {
+        "accumulating": "Long-term holders are adding coins.",
+        "distributing": "Long-term holders are moving coins to exchanges.",
+        "neutral": "Long-term holders show no clear change."
+      }
+    }
+  },
+  "scenarios": {
+    "unavailable": "Key levels are not available, so there is no trigger to show.",
+    "lead": {
+      "Uptrend": "The uptrend continues",
+      "Range": "The range holds",
+      "Downtrend": "The downtrend continues",
+      "unknown": "Current conditions continue"
+    },
+    "base": {
+      "title": "Base case",
+      "both": "{lead} between support {support} and resistance {resistance}.",
+      "noSupport": "{lead} below resistance {resistance}.",
+      "noResistance": "{lead} above support {support}.",
+      "none": "{lead}, but no nearby levels are available to bound it.",
+      "trigger": "Daily closes stay between {support} and {resistance}.",
+      "triggerNoSupport": "Daily closes stay below {resistance}.",
+      "triggerNoResistance": "Daily closes stay above {support}.",
+      "triggerNone": "No trigger: key levels are not available."
+    },
+    "upside": {
+      "title": "Upside",
+      "summary": "A move higher opens the next resistance.",
+      "trigger": "A daily close above {zone} ({strength}) opens the next resistance, {next}.",
+      "triggerNoNext": "A daily close above {zone} ({strength}) leaves no further resistance zone mapped.",
+      "triggerWeakOnly": "No Medium or Strong resistance zone above; the nearest zone is {zone} ({strength}).",
+      "triggerNone": "No resistance zone found above the price.",
+      "allTimeHigh": "No earlier price above this."
+    },
+    "downside": {
+      "title": "Downside",
+      "summary": "A move lower opens the next support.",
+      "trigger": "A daily close below {zone} ({strength}) opens the next support, {next}.",
+      "triggerNoNext": "A daily close below {zone} ({strength}) leaves no further support zone mapped.",
+      "triggerNone": "No support zone found below the price."
+    }
+  }
+}

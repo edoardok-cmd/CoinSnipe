@@ -60,6 +60,8 @@ const SCAN_TARGETS: { dir: string; exts: Set<string> }[] = [
   { dir: 'apps/web/content', exts: TEXT_EXTS },
   { dir: 'apps/web/app', exts: new Set(['.tsx', '.ts']) },
   { dir: 'packages/scoring/src/signals/templates', exts: TEXT_EXTS },
+  // CSN-032: the reviewed Bitcoin outlook sentence, driver, history and scenario templates.
+  { dir: 'packages/scoring/src/levelA/templates', exts: TEXT_EXTS },
   { dir: 'apps/worker/src/email/templates', exts: TEXT_EXTS },
   { dir: 'packages/db/content', exts: TEXT_EXTS },
 ];
