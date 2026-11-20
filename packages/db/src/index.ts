@@ -20,3 +20,10 @@ if (process.env['NODE_ENV'] !== 'production') {
 export * from '@prisma/client';
 export { NARRATIVES, SECTORS } from './reference-data';
 export type { ReferenceRow } from './reference-data';
+export {
+  CALENDAR_DEFAULT_DAYS,
+  CALENDAR_MAX_DAYS,
+  CalendarInputError,
+  listUpcomingCalendar,
+} from './calendar';
+export type { CalendarReader, UpcomingCalendar, UpcomingCalendarEvent } from './calendar';
