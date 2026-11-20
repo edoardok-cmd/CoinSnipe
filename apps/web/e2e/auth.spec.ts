@@ -81,7 +81,7 @@ test.describe('magic link sign-up', () => {
     expect(link).toBeTruthy();
 
     await page.goto(link!);
-    await expect(page).toHaveURL(/\/app\/onboarding$/);
+    await expect(page).toHaveURL(/\/app\/onboarding(\?.*)?$/);
 
     const session = (await context.cookies()).find((c) => c.name.endsWith('authjs.session-token'));
     expect(session).toBeDefined();
@@ -102,7 +102,10 @@ test.describe('magic link sign-up', () => {
       if (i < 5)
         await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
     }
-    await expect(page.getByRole('alert')).toContainText('Wait a little and try again');
+    // Next.js has its own route-announcer alert, so scope to the page content.
+    await expect(page.getByRole('main').getByRole('alert')).toContainText(
+      'Wait a little and try again',
+    );
     expect(mailbox.mails.filter((m) => JSON.stringify(m.to).includes(email))).toHaveLength(5);
   });
 });

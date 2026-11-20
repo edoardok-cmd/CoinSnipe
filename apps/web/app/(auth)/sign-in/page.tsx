@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { AuthError } from 'next-auth';
 import { auth, signIn } from '../../../auth';
+import { emailSignInTarget } from '../../../lib/auth/emailSignIn';
 import { beginOAuthSignIn } from '../../../lib/auth/oauthStart';
 import { enabledProviders } from '../../../lib/auth/providers';
 import { errorMessage, safeCallbackPath, SIGN_IN_COPY } from '../../../lib/auth/signInCopy';
@@ -21,17 +22,17 @@ export default async function SignInPage({ searchParams }: { searchParams: Searc
   async function emailAction(formData: FormData) {
     'use server';
     const email = String(formData.get('email') ?? '').trim();
-    try {
-      await signIn('resend', {
-        email,
-        redirect: false,
-        ...(callback ? { redirectTo: callback } : {}),
-      });
-    } catch (error) {
-      if (error instanceof AuthError) redirect(`/sign-in?error=${encodeURIComponent(error.type)}`);
-      throw error;
-    }
-    redirect('/sign-in?check=1');
+    redirect(
+      await emailSignInTarget(
+        () =>
+          signIn('resend', {
+            email,
+            redirect: false,
+            ...(callback ? { redirectTo: callback } : {}),
+          }),
+        (error) => (error instanceof AuthError ? error.type : null),
+      ),
+    );
   }
 
   async function oauthAction(formData: FormData) {

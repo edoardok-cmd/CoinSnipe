@@ -14,6 +14,7 @@ import {
   LINK_INTENT_COOKIE,
   readIntentUserId,
 } from './lib/auth/linkIntent';
+import { createTokenGate, hashVerificationToken } from './lib/auth/tokenGate';
 import { sendMagicLink } from './lib/auth/magicLinkSender';
 import { enabledProviders } from './lib/auth/providers';
 import { defaultRateLimitStore } from './lib/auth/rateLimit';
@@ -24,6 +25,8 @@ export { FIRST_LOGIN_PATH, HOME_PATH } from './lib/auth/config';
 const isProduction = process.env.NODE_ENV === 'production';
 const enabled = enabledProviders(process.env);
 
+const tokenGate = createTokenGate();
+
 const providers = [
   ...(enabled.includes('resend')
     ? [
@@ -31,7 +34,7 @@ const providers = [
           apiKey: process.env.RESEND_API_KEY ?? '',
           from: process.env.EMAIL_FROM ?? '',
           maxAge: MAGIC_LINK_MAX_AGE_SECONDS,
-          async sendVerificationRequest({ identifier, url, request }) {
+          async sendVerificationRequest({ identifier, url, request, token }) {
             const client = new ResendClient(process.env.RESEND_API_KEY);
             await sendMagicLink({
               identifier,
@@ -39,6 +42,11 @@ const providers = [
               headers: request.headers,
               from: process.env.EMAIL_FROM ?? '',
               store: defaultRateLimitStore(),
+              onRefused: async () =>
+                tokenGate.markRefused(
+                  identifier,
+                  await hashVerificationToken(token, process.env.AUTH_SECRET ?? ''),
+                ),
               send: async (email) => {
                 const { error } = await client.emails.send(email);
                 if (error) throw new Error(`Resend rejected the email: ${error.name}`);
@@ -66,7 +74,7 @@ const providers = [
     : []),
 ];
 
-const adapter = withTokenMinimisation(PrismaAdapter(prisma));
+const adapter = tokenGate.wrap(withTokenMinimisation(PrismaAdapter(prisma)));
 
 export const { handlers, auth, signIn, signOut } = NextAuth(
   buildAuthConfig({

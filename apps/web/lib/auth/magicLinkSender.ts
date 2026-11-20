@@ -30,15 +30,25 @@ export async function sendMagicLink(input: {
   store: RateLimitStore;
   send: (email: OutgoingEmail) => Promise<void>;
   now?: number;
+  /** Called when the request is refused or the send fails, so the stored token can be removed. */
+  onRefused?: () => Promise<void>;
 }): Promise<void> {
   const verdict = await checkMagicLinkLimit(input.store, {
     email: input.identifier,
     ip: clientIp(input.headers),
     ...(input.now !== undefined ? { now: input.now } : {}),
   });
-  if (!verdict.allowed) throw new MagicLinkRateLimitedError(verdict.limitedBy);
+  if (!verdict.allowed) {
+    await input.onRefused?.();
+    throw new MagicLinkRateLimitedError(verdict.limitedBy);
+  }
 
   emitAuthEvent('signup_started', 'resend');
   const { subject, html, text } = renderMagicLinkEmail(input.url);
-  await input.send({ from: input.from, to: input.identifier, subject, html, text });
+  try {
+    await input.send({ from: input.from, to: input.identifier, subject, html, text });
+  } catch (error) {
+    await input.onRefused?.();
+    throw error;
+  }
 }

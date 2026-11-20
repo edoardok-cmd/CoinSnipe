@@ -16,6 +16,8 @@ Auth.js v5 with the Prisma adapter. One page (`/sign-in`) serves sign-up and log
 2. Set `RESEND_API_KEY` and `EMAIL_FROM` (for example `CoinSnipe <login@your-domain>`).
 3. The link is valid 15 minutes and works once. Limits: 5 per email address per hour and 20 per IP per hour.
 
+A refused request (rate limit) or a failed send removes the verification token Auth.js had just stored (`lib/auth/tokenGate.ts`), so refusals leave no database row. The sign-in page reads the result of `signIn()` and shows the "could not send" message instead of "Check your email" in those cases.
+
 Client IP assumption: the per-IP limit assumes a trusted proxy in front of the app (Vercel). It uses `x-real-ip` when present, otherwise the last `x-forwarded-for` entry (the one the proxy appended); earlier entries are client-supplied and ignored. If the app is ever hosted without such a proxy, a client can pick its own IP bucket, and only the per-email limit still holds.
 
 Rate-limit storage: the default store is **in memory** (`lib/auth/rateLimit.ts`), so counts are per server instance and reset on restart; on Vercel the effective limit can be higher than the nominal one. There is no rate-limit table in the schema. To make it exact, add a table (database owner) or Redis and implement `RateLimitStore.hit()` against it.
