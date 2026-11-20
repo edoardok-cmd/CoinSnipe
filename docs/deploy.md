@@ -12,7 +12,7 @@ Never paste tokens into commands or chat. `vercel login` is interactive.
 4. Settings > Git: Production Branch `main`. Pull requests get Preview deployments.
 5. Settings > Deployment Protection: Vercel Authentication ON for **Preview** deployments. Preview URLs then require a Vercel login.
 6. Environment variables (Settings > Environment Variables, or `pnpm dlx vercel env add NAME production`, which prompts for the value):
-   - `NEXT_PUBLIC_POSTHOG_KEY` (public key; Production + Preview). No other `.env.example` variable is needed by the site yet; add others only when a task needs them.
+   - None are required by the site today. `NEXT_PUBLIC_POSTHOG_KEY` is reserved for the future analytics task (the CSP already allows the PostHog hosts); when it is added, set it for Production only so Preview traffic does not pollute production analytics. Add other `.env.example` variables only when a task needs them.
 7. Domain: Settings > Domains > add `<domain>` (primary) and `www.<domain>` set to redirect (308) to `<domain>`.
 
 ## DNS records (at the registrar, once D05 is confirmed)
@@ -25,13 +25,15 @@ Vercel shows the exact values per project; trust the dashboard if it differs. HT
 ## Deploy
 
 - Pushing `main` deploys to production. **Get explicit user opt-in before the first push.**
-- Manual: `pnpm dlx vercel deploy --prod`.
+- Manual: `pnpm dlx vercel deploy --prod` uploads your local working tree, so run it only from a clean, up-to-date `main` checkout.
 
 ## Rollback
 
 - Dashboard > Deployments > previous good deployment > "Promote to Production" (instant rollback), or `pnpm dlx vercel rollback`.
 
 ## Security headers
+
+HSTS is sent with `includeSubDomains; preload`. Do **not** submit the domain to hstspreload.org until the domain is final (D05) and every subdomain serves HTTPS: preload removal is slow. The CSP still allows `script-src 'unsafe-inline'` (Next inline bootstrap), so an A+ grade may need the nonce-CSP follow-up CSN-015-FOLLOWUP-1; check the real grade after the first deploy.
 
 Defined in `apps/web/lib/security-headers.ts` and applied via `next.config.ts` (CSP, HSTS, nosniff, Referrer-Policy, Permissions-Policy, frame-ancestors none). The PostHog host in the CSP is `eu.i.posthog.com`; change it if the project region differs. After deploy, https://securityheaders.com/?q=https://`<domain>` should grade A or better.
 

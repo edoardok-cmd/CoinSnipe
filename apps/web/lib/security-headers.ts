@@ -28,7 +28,8 @@ export function buildCsp(isDev = false): string {
   const body = Object.entries(directives)
     .map(([k, v]) => `${k} ${v.join(' ')}`)
     .join('; ');
-  return `${body}; upgrade-insecure-requests`;
+  // Not in dev: it would rewrite http://localhost subresources to https and break Safari.
+  return isDev ? body : `${body}; upgrade-insecure-requests`;
 }
 
 export function securityHeaders(isDev = false): { key: string; value: string }[] {
