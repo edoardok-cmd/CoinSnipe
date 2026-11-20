@@ -49,19 +49,29 @@ If the Protection Bypass for Automation secret leaks:
 1. Before changing anything, save the current (old) secret into an environment variable so it can be tested after rotation. Use a hidden prompt, not a literal in a command: `read -rs OLD_BYPASS && export OLD_BYPASS`, then paste the value.
 2. In the same Deployment Protection section, revoke it or regenerate it (labels may differ). Revoke first if you are not sure which action is available.
 3. Save the new value the same way: `read -rs VERCEL_AUTOMATION_BYPASS_SECRET && export VERCEL_AUTOMATION_BYPASS_SECRET`. Update the copy in your local secret store and in any environment that held the old one (for example, the sync script's environment once it exists).
-4. Verify the new secret is accepted. This must print `200`:
+4. Verify the new secret is accepted. An empty variable is never a pass. Guard first, then this must print `200`:
 
    ```
+   test -n "$VERCEL_AUTOMATION_BYPASS_SECRET" || { echo "VERCEL_AUTOMATION_BYPASS_SECRET is empty: not a pass"; exit 1; }
    curl -sS -o /dev/null -w '%{http_code}\n' -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" https://coinsnipe-hub-repo.vercel.app/
    ```
 
-5. Verify the old secret is rejected. This must **not** print `200`:
+5. Verify the old secret is revoked. An empty `OLD_BYPASS` is never a pass. Guard first, then run the check. Note the `-w` format, which prints the redirect host:
 
    ```
-   curl -sS -o /dev/null -w '%{http_code}\n' -H "x-vercel-protection-bypass: $OLD_BYPASS" https://coinsnipe-hub-repo.vercel.app/
+   test -n "$OLD_BYPASS" || { echo "OLD_BYPASS is empty: not a pass"; exit 1; }
+   curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' -H "x-vercel-protection-bypass: $OLD_BYPASS" https://coinsnipe-hub-repo.vercel.app/
    ```
 
-6. Run `unset OLD_BYPASS` once the check is done.
+   The old secret counts as **revoked** only when all of these hold:
+
+   - the status is `401`, or it is a `3xx`;
+   - for a `3xx`, the redirect host is exactly `vercel.com`. You must see `vercel.com` in the output, for example `302 https://vercel.com/sso-api?...`;
+   - the status is not `000`. `000` means no response was received, which is not a pass.
+
+   Anything else counts as **not** revoked: `200`, a `3xx` to another host, `000`, or empty output. Do not continue; re-check the rotation in the dashboard first.
+
+6. Run `unset OLD_BYPASS` once the check is done, whatever the result.
 7. Use environment-variable indirection only, as above. Never write a literal secret into a command, this repo, chat, or shell history.
 
 ## Verification
